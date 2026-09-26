@@ -1,80 +1,54 @@
-# Naveen Bharat — Vercel Deployment Guide
+# Deploying Naveen Bharat Files
 
-## Prerequisites
+The app is a TanStack Start (React 19 + Vite) project. It has **no database**: the public
+GitHub repo `MrAnujBabu/edu-pdfs@main` is the library, and `.library/manifest.json` inside
+it stores order, titles/notes, hidden items, aliases and settings.
 
-- **Node.js** ≥ 18
-- A **Vercel** account ([vercel.com](https://vercel.com))
-- A **GitHub** repository connected to Vercel (or use Vercel CLI)
+There are two supported hosts.
 
----
+## 1. Lovable (primary)
 
-## Environment Variables
+Publish from the Lovable editor. Lovable injects everything the server needs:
 
-Set these in Vercel → Project → Settings → Environment Variables:
+| Secret | Where it comes from |
+| --- | --- |
+| `GITHUB_API_KEY` | Connectors → GitHub (account that owns the storage repo, `repo` scope) |
+| `LOVABLE_API_KEY` | automatic (connector gateway) |
+| `OWNER_PASSCODE` | Project Settings → Secrets — the passcode typed on `/sign-in` |
+| `SESSION_SECRET` | Project Settings → Secrets — random 64-char string that signs the owner cookie |
+| `STORAGE_REPO` | optional, `owner/repo@branch`, only if the library is not `MrAnujBabu/edu-pdfs@main` |
 
-| Variable | Description |
-|---|---|
-| `VITE_SUPABASE_URL` | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Your Supabase anon (public) key |
+## 2. Vercel (mirror of the code repo)
 
-> ⚠️ Never add your GitHub PAT or Supabase service role key here — those are entered at runtime in the UI.
+Vercel is connected to `MrAnujBabu/Github-Storages-CDN`. The build detects Vercel on its own
+and emits a Build Output API v3 bundle (`.vercel/output`: static assets + one Node 22 function),
+so no framework preset or output directory needs to be configured. `vercel.json` only pins
+`bun install` / `bun run build`.
 
----
+Set these in **Vercel → Project → Settings → Environment Variables** (Production):
 
-## Option 1: Deploy via Vercel Dashboard
+| Variable | Value |
+| --- | --- |
+| `OWNER_PASSCODE` | the owner passcode (any strong string) |
+| `SESSION_SECRET` | `openssl rand -hex 32` — different from Lovable's is fine; sessions are per host |
+| `GITHUB_TOKEN` | a GitHub token for the owner account. Fine-grained: repository `edu-pdfs`, permissions **Contents: Read and write**, **Pages: Read and write** (optional, for the Pages status card). Classic: `repo` scope. |
+| `STORAGE_REPO` | optional, see above |
 
-1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import your GitHub repo
-3. Vercel auto-detects **Vite** — confirm these settings:
-   - **Framework Preset**: Vite
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-4. Add environment variables (see above)
-5. Click **Deploy**
+Without `GITHUB_TOKEN` the site still browses and serves links (the repo is public, anonymous
+API reads are cached for 20 s) but upload / rename / delete fail with a clear message.
+Without `OWNER_PASSCODE` + `SESSION_SECRET` the sign-in page shows the setup hint instead.
 
----
+`LOVABLE_API_KEY` / `GITHUB_API_KEY` are **not** used on Vercel — the app falls back to
+`GITHUB_TOKEN` automatically (`src/lib/github.server.ts`).
 
-## Option 2: Deploy via Vercel CLI
+### Checking a deploy
 
-```bash
-# Install CLI
-npm i -g vercel
+1. Vercel → Deployments: the build log should end with `Generated .vercel/output/nitro.json`.
+2. Open the site: the Browse home (search bar, type tiles, storage meter) must appear — not the
+   old "File Upload & CDN" page.
+3. `/sign-in` → passcode → create a folder → upload a small PDF → copy link → open it.
 
-# Login
-vercel login
+### Limits that shape the numbers
 
-# Deploy (from project root)
-vercel
-
-# For production
-vercel --prod
-```
-
----
-
-## SPA Routing
-
-The `vercel.json` file in the project root handles SPA routing:
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
-```
-
-This ensures routes like `/viewer/abc123` work correctly on refresh.
-
----
-
-## Custom Domain
-
-1. Go to Vercel → Project → Settings → Domains
-2. Add your domain (e.g., `files.naveenbharat.com`)
-3. Update DNS records as instructed by Vercel
-4. SSL is automatic
-
----
-
-## Updating
-
-Push to your connected GitHub branch and Vercel auto-deploys. That's it! 🚀
+- 48 MB per file (jsDelivr refuses ≥ 50 MB); 40 MB / 20 files per multi-file request
+  (server memory with base64 copies); GitHub Pages site ≤ 1 GB, ~1 min publish delay.

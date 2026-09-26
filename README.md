@@ -12,17 +12,22 @@ PDFs, notes and images stored in a GitHub repo and delivered through GitHub Page
 Everything the app needs is listed here so nothing is lost when the environment changes. Check each item, in this order:
 
 0. **Resume, don't restart** — open `roadmap.md`: "In progress" is the exact next step. Finished items stay finished.
-1. **GitHub API connector** — Lovable → Connectors → GitHub → connect the account that owns the storage repo, with `repo` scope. This creates the `GITHUB_API_KEY` secret. Without it the library still *reads* (public repo) but upload / rename / delete fail. (Lost on every workspace move so far — re-link first.)
-2. **Secrets** (Project Settings → Secrets):
+1. **Code** — if the project is blank, restore it from the code repo `MrAnujBabu/Github-Storages-CDN@main` (or the latest backup zip): copy everything except `.git`, `.lovable/`, `node_modules/`, `.env`, then `bun install`. The repo mirrors this project; `src/routeTree.gen.ts` regenerates itself.
+2. **GitHub API connector** — Lovable → Connectors → GitHub → connect the account that owns the storage repo, with `repo` scope. This creates the `GITHUB_API_KEY` secret. Without it the library still *reads* (public repo) but upload / rename / delete fail. (Lost on every workspace move so far — re-link first. Move #4, Sep 26 2026 15:40 UTC: re-linked as "NB's GitHub API".)
+3. **Secrets** (Project Settings → Secrets):
    - `OWNER_PASSCODE` — the passcode typed on `/sign-in`. Only the owner knows it; choose a new one if lost.
    - `SESSION_SECRET` — random 64-char string used to sign the owner cookie. Generate a fresh one; old sessions simply expire.
    - `STORAGE_REPO` — optional, only if the storage repo is not `MrAnujBabu/edu-pdfs@main`.
    - `LOVABLE_API_KEY` — provided by Lovable automatically (used by the connector gateway).
-3. **Storage repo** must exist and be public (jsDelivr only serves public repos). Files up to 48 MB each. GitHub Pages is enabled on it (Settings → Delivery) as the fallback once the repo passes jsDelivr's 50 MB whole-repo limit.
-4. **Supabase project "Github Storage"** (optional) — holds the *old* uploader's tables (`uploaded_pdfs`, `github_settings`). The library does not read it; attach it only if you want to import old titles. Project Settings → Connectors → Supabase.
-5. **Verify**: open `/sign-in`, sign in, create a test folder, upload one file, copy its link, open the link, delete the folder.
+4. **Storage repo** must exist and be public (jsDelivr only serves public repos). Files up to 48 MB each. GitHub Pages is enabled on it (Settings → Delivery) as the fallback once the repo passes jsDelivr's 50 MB whole-repo limit.
+5. **Supabase project "Github Storage"** (optional, ref `nyqfqdoqsqoajqqeuzdi`) — holds the *old* uploader's tables (`uploaded_pdfs`, `github_settings`). The library does not read it. Only the owner can attach it (Project Settings → Connectors → Supabase); it cannot be linked from chat and Lovable Cloud would create a *different*, empty project.
+6. **Verify**: open `/sign-in`, sign in, create a test folder, upload one file, copy its link, open the link, delete the folder.
 
-Code backup: connect Git sync from the Lovable editor (Plus menu → GitHub → Connect project). After that every change is committed to your own GitHub repo automatically.
+## Code repo and the Vercel site
+
+- Code repo: `MrAnujBabu/Github-Storages-CDN@main` — a mirror of this project pushed from Lovable via the GitHub API (one commit per sync; `gh_commit`-style Git Data API: blobs → tree → commit → ref). Only the owner can turn on automatic Git sync: editor → Plus (+) → GitHub → Connect project.
+- Live site: `https://github-storages-cdn.vercel.app` (Vercel, connected to that repo). The build auto-targets Vercel (`.vercel/output`, Node 22 function) — see `DEPLOYMENT.md` for the three env vars Vercel needs (`OWNER_PASSCODE`, `SESSION_SECRET`, `GITHUB_TOKEN`). Without them the site is read-only.
+- Sep 26 2026 audit: the repo still carried the *old* Vite/Supabase uploader (`index.html`, `src/main.tsx`, `postcss.config.js`, `package-lock.json`, SPA `vercel.json` …), which made every Vercel build fail, so the site kept serving the March app. Those files were removed in the "Remove legacy uploader" commit; they stay in git history if ever needed.
 
 ## Where things live
 
