@@ -1,4 +1,4 @@
-import type { LinkStyle } from "./links";
+import type { LinkHealth, LinkHealthState, LinkStyle } from "./links";
 import type { ManifestSettings } from "./manifest";
 import type { FileKind } from "./paths";
 import type { RepoRef } from "./storage-config";
@@ -97,6 +97,26 @@ export interface PagesInfo {
   url: string | null;
   sourceBranch: string | null;
   sourcePath: string | null;
+}
+
+/** One public delivery channel (Pages, jsDelivr, …) summarised over a sample of files. */
+export interface DeliveryChannel {
+  style: LinkStyle;
+  /** Files that answered 2xx/3xx. */
+  ok: number;
+  total: number;
+  /** Median round-trip of the successful probes, in ms. */
+  medianMs: number | null;
+  /** Worst state seen across the sample: ok < pending < blocked < down. */
+  state: LinkHealthState;
+}
+
+/** Library-wide link status: a small sample of real files probed on every channel. */
+export interface DeliveryHealth {
+  checkedAt: string;
+  headSha: string;
+  samples: Array<{ path: string; name: string; results: LinkHealth[] }>;
+  channels: DeliveryChannel[];
 }
 
 export interface UploadedEntry {

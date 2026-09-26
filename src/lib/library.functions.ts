@@ -2,7 +2,17 @@ import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { setResponseStatus } from "@tanstack/react-start/server";
 import { z } from "zod";
 
-import type { BrowseView, FileDetail, FolderView, KindListing, LibraryStats, PagesInfo, SearchHit, SessionInfo } from "./library-types";
+import type {
+  BrowseView,
+  DeliveryHealth,
+  FileDetail,
+  FolderView,
+  KindListing,
+  LibraryStats,
+  PagesInfo,
+  SearchHit,
+  SessionInfo,
+} from "./library-types";
 import { type LinkHealth, isPreviewOrigin, normalizeAppUrl } from "./links";
 import type { ManifestSettings } from "./manifest";
 
@@ -137,8 +147,20 @@ export const checkFileLinks = createServerFn({ method: "GET" })
       setResponseStatus(404);
       throw new Error("Ye file library mein nahi mili.");
     }
-    return checkLinks(detail.repo, detail.headSha, detail.file.path, detail.settings.appUrl);
+    return checkLinks(detail.repo, detail.headSha, detail.file.path, detail.settings.appUrl, { owner });
   });
+
+/**
+ * Library-wide link status: a handful of real (never hidden) files probed on
+ * GitHub Pages, jsDelivr, raw GitHub and Statically. Public like the other
+ * reads — only fixed public hosts are contacted. Cached ~45 s per commit.
+ */
+export const getDeliveryHealth = createServerFn({ method: "GET" }).handler(async (): Promise<DeliveryHealth> => {
+  const { loadSnapshot, sampleFiles } = await import("./library.server");
+  const { checkDelivery } = await import("./linkcheck.server");
+  const snapshot = await loadSnapshot();
+  return checkDelivery(snapshot.repo, snapshot.headSha, sampleFiles(snapshot, 4));
+});
 
 /* ------------------------------ auth ------------------------------- */
 
@@ -159,7 +181,9 @@ export const signIn = createServerFn({ method: "POST" })
     const ok = await s.checkPasscode(data.passcode);
     if (!ok) {
       s.recordFailure(key);
-      await new Promise((r) => setTimeout(r, 400));
+      // The in-memory attempt counter is per isolate (best effort on Workers), so a
+      // fixed slow-down per wrong guess is the part that always applies.
+      await new Promise((r) => setTimeout(r, 1200));
       setResponseStatus(401);
       throw new Error("Passcode galat hai — dobara dekh kar likho.");
     }

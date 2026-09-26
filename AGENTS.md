@@ -25,3 +25,4 @@
 - `<html data-bottom-bar>` (AppShell) lifts sonner toasts above fixed bars — why: toasts must not cover actions.
 - README "Setup after a reset" + `roadmap.md` "In progress" are the resume points; update both in the same turn as any connector/secret change — why: two workspace moves already lost connections.
 - `/` is the Browse home (`BrowseHome` + `buildBrowse`), `/files` the root folder listing, `/c/$kind` per-type lists; recents live in localStorage (`useRecents`) — why: Google-Files-style entry screen with zero extra GitHub/Supabase reads.
+- Library-wide link health = `getDeliveryHealth` → `checkDelivery` (4 files from `sampleFiles`, fixed public hosts only, 45 s cache per commit) rendered by `DeliveryHealthCard` (Settings full / home compact); per-file checks stay in `checkFileLinks` — why: visitors can see it, so it must never probe owner-configured origins or hidden files.

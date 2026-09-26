@@ -1,4 +1,6 @@
-import { type LinkHealth, type LinkStyle, buildLink, normalizeAppUrl } from "./links";
+import type { DeliveryChannel, DeliveryHealth } from "./library-types";
+import { type LinkHealth, type LinkHealthState, type LinkStyle, buildLink, normalizeAppUrl } from "./links";
+import { baseName } from "./paths";
 import type { RepoRef } from "./storage-config";
 
 /**
@@ -49,23 +51,55 @@ function classify(style: LinkStyle, status: number | null): LinkHealth["state"] 
 }
 
 /**
+ * Hosting platforms whose hostnames can only ever point at public edge servers.
+ * An address on one of these is safe to probe for anonymous visitors too; any
+ * other owner-entered address is probed only while the owner is signed in, so a
+ * public visitor can never turn this into a server-side request against an
+ * internal host (the app itself never accepts a caller-supplied address).
+ */
+const PUBLIC_EDGE_SUFFIXES = [".lovable.app", ".vercel.app", ".netlify.app", ".pages.dev", ".github.io", ".workers.dev"];
+
+function isKnownPublicHost(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    return PUBLIC_EDGE_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The viewer link is only probed when the owner configured a public address:
  * probing an arbitrary caller-supplied origin from the server would be an SSRF hole.
  */
-function viewerTarget(appUrl: string | undefined, path: string, repo: RepoRef, commit: string): string | null {
+function viewerTarget(
+  appUrl: string | undefined,
+  path: string,
+  repo: RepoRef,
+  commit: string,
+  owner: boolean,
+): string | null {
   const origin = normalizeAppUrl(appUrl);
   if (!origin || !origin.startsWith("https://")) return null;
+  if (!owner && !isKnownPublicHost(origin)) return null;
   return buildLink("viewer", path, { repo, commit, origin });
 }
 
-export async function checkLinks(repo: RepoRef, commit: string, path: string, appUrl?: string): Promise<LinkHealth[]> {
-  const key = `${repo.owner}/${repo.repo}@${commit}:${path}:${appUrl ?? ""}`;
+export async function checkLinks(
+  repo: RepoRef,
+  commit: string,
+  path: string,
+  appUrl?: string,
+  opts: { owner?: boolean } = {},
+): Promise<LinkHealth[]> {
+  const owner = opts.owner === true;
+  const key = `${repo.owner}/${repo.repo}@${commit}:${path}:${appUrl ?? ""}:${owner ? "o" : "v"}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.result;
 
   const ctx = { repo, commit };
   const targets: Array<{ style: LinkStyle; url: string }> = EXTERNAL_STYLES.map((style) => ({ style, url: buildLink(style, path, ctx) }));
-  const viewer = viewerTarget(appUrl, path, repo, commit);
+  const viewer = viewerTarget(appUrl, path, repo, commit, owner);
 
   const results = await Promise.all(
     targets.map(async ({ style, url }): Promise<LinkHealth> => {
@@ -93,4 +127,70 @@ export async function checkLinks(repo: RepoRef, commit: string, path: string, ap
   if (cache.size > 200) cache.clear();
   cache.set(key, { at: Date.now(), result: results });
   return results;
+}
+
+/* --------------------------- library-wide check --------------------------- */
+
+/** Channels that matter for sharing: the default (Pages), the old CDN, and the two fallbacks. */
+const DELIVERY_STYLES: LinkStyle[] = ["pages", "cdn", "raw", "statically"];
+const STATE_RANK: Record<LinkHealthState, number> = { ok: 0, skipped: 0, preview: 1, pending: 1, blocked: 2, down: 3 };
+
+const deliveryCache = new Map<string, { at: number; result: DeliveryHealth }>();
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+}
+
+function summarise(style: LinkStyle, results: LinkHealth[]): DeliveryChannel {
+  const ok = results.filter((r) => r.state === "ok");
+  let worst: LinkHealthState = "ok";
+  for (const r of results) if (STATE_RANK[r.state] > STATE_RANK[worst]) worst = r.state;
+  return {
+    style,
+    ok: ok.length,
+    total: results.length,
+    medianMs: median(ok.map((r) => r.ms)),
+    state: results.length === 0 ? "skipped" : ok.length === results.length ? "ok" : worst,
+  };
+}
+
+/**
+ * Probes a few real files on every public channel and rolls the answers up per
+ * channel — the "is my library reachable right now?" panel. Only fixed public
+ * hosts are contacted, so this is safe to expose to visitors. Cached ~45 s per
+ * commit; a new upload changes the commit and re-checks automatically.
+ */
+export async function checkDelivery(repo: RepoRef, commit: string, paths: string[]): Promise<DeliveryHealth> {
+  const key = `${repo.owner}/${repo.repo}@${commit}:delivery:${paths.join("|")}`;
+  const hit = deliveryCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.result;
+
+  const ctx = { repo, commit };
+  const samples = await Promise.all(
+    paths.map(async (path) => {
+      const results = await Promise.all(
+        DELIVERY_STYLES.map(async (style): Promise<LinkHealth> => {
+          const url = buildLink(style, path, ctx);
+          const r = await probe(url);
+          return { style, url, state: classify(style, r.status), status: r.status, ms: r.ms, contentType: r.contentType };
+        }),
+      );
+      return { path, name: baseName(path), results };
+    }),
+  );
+
+  const channels = DELIVERY_STYLES.map((style) =>
+    summarise(
+      style,
+      samples.map((s) => s.results.find((r) => r.style === style)!).filter(Boolean),
+    ),
+  );
+
+  const result: DeliveryHealth = { checkedAt: new Date().toISOString(), headSha: commit, samples, channels };
+  if (deliveryCache.size > 50) deliveryCache.clear();
+  deliveryCache.set(key, { at: Date.now(), result });
+  return result;
 }

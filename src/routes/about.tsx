@@ -43,12 +43,15 @@ const STEPS = [
 ];
 
 const LIMITS = [
-  ["File size", "48 MB tak. Badi PDF ko compress ya split karo."],
-  ["CDN limit", "jsDelivr poore repo ko sirf 50 MB tak serve karta hai — uske upar har CDN link band. Settings mein meter hai; 40 MB par warning aati hai."],
-  ["Bada repo", "GitHub Pages chalu karo (Settings → Delivery): wahi repo 1 GB tak deliver hota hai, naya file 1 minute mein live. Purane CDN links tab tak chalte rahenge jab tak repo 50 MB ke andar hai."],
-  ["Naya content", "Branch wala CDN link kabhi-kabhi purana version dikhata hai; app khud purge bhejta hai. Pakka chahiye to \"Permanent CDN link\" copy karo."],
+  ["File size", "48 MB tak. jsDelivr CDN sirf 20 MB tak ki ek file deta hai — usse badi file Pages ya Raw link se bhejo. Badi PDF compress ya split karna behtar hai."],
+  ["CDN limit", "jsDelivr GitHub repo ke liye ~150 MB tak hi banaya gaya hai aur uski listing 50 MB ke baad ruk jati hai. File links uske baad bhi mil jate hain, par bharosa GitHub Pages par karo."],
+  ["Bada repo", "GitHub Pages default hai: 1 GB tak deliver hota hai, naya file lagbhag 1 minute mein live. Library abhi ~145 MB par hai aur Pages link theek chal rahe hain."],
+  ["Naya content", "Branch wala CDN link 12 ghante tak purana version dikha sakta hai; app khud purge bhejta hai. Pakka chahiye to \"Permanent CDN link\" copy karo."],
   ["Rename / delete", "Purana link band ho jata hai — naya link dobara share karo. Viewer link purane naam se bhi redirect ho jata hai."],
-  ["Privacy", "Repo public hai. Sirf \"Visitors se chhupao\" wali files list mein nahi dikhtin, par seedha link se khul sakti hain."],
+  [
+    "Privacy",
+    "Repo public hai. \"Visitors se chhupao\" wali file list, search aur app ke viewer page se gayab ho jati hai, par uska GitHub / Pages / CDN link kisi ke paas ho to wahan se khul jayegi. Sach mein private chahiye to file hata do.",
+  ],
 ];
 
 function AboutPage() {
@@ -87,16 +90,16 @@ function AboutPage() {
         <h2 className="text-[16px] font-semibold text-foreground">Link formats</h2>
         <ul className="mt-2 space-y-1.5 text-[14px] text-foreground/85">
           <li>
-            <span className="font-medium">GitHub Pages link</span> — <code className="font-mono text-[12.5px]">owner.github.io/repo/…</code> — default; repo bada ho tab bhi chalta hai.
+            <span className="font-medium">GitHub Pages link</span> — <code className="font-mono text-[12.5px]">owner.github.io/repo/…</code> — default; 1 GB tak ki library aur badi files par bhi chalta hai. Naya file aane ke baad ~1 minute leta hai.
           </li>
           <li>
-            <span className="font-medium">CDN link</span> — <code className="font-mono text-[12.5px]">cdn.jsdelivr.net/gh/owner/repo@main/…</code> — purana format, poora repo 50 MB tak.
+            <span className="font-medium">CDN link</span> — <code className="font-mono text-[12.5px]">cdn.jsdelivr.net/gh/owner/repo@main/…</code> — purana format; ek file 20 MB tak, aur bade repo par jsDelivr kabhi block kar sakta hai. Branch link 12 ghante tak cache rehta hai.
           </li>
           <li>
-            <span className="font-medium">Permanent CDN link</span> — commit se bandha; file replace hone par bhi wahi version.
+            <span className="font-medium">Permanent CDN link</span> — commit se bandha; file replace hone par bhi wahi purana version deta hai (jsDelivr ise hamesha ke liye store kar leta hai, purge nahi hota).
           </li>
           <li>
-            <span className="font-medium">Viewer link</span> — is app ka page; mobile par PDF seedha khulti hai, agli/pichli file ke buttons ke saath.
+            <span className="font-medium">Viewer link</span> — is app ka page; mobile par PDF seedha khulti hai, agli/pichli file ke buttons ke saath. Chhupayi hui file ka viewer link visitors ke liye nahi khulta.
           </li>
         </ul>
       </section>

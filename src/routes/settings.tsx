@@ -4,6 +4,7 @@ import { AlertTriangle, Check, ExternalLink, Github, Globe, Link2, LogOut, Refre
 import { useEffect, useState } from "react";
 
 import { AppShell, PageTitle } from "@/components/library/AppShell";
+import { DeliveryHealthCard } from "@/components/library/DeliveryHealthCard";
 import { KindIcon } from "@/components/library/KindIcon";
 import {
   AlertDialog,
@@ -277,8 +278,8 @@ function SettingsPage() {
             )}
           </div>
         </div>
+        <DeliveryHealthCard className="mt-3" />
       </section>
-
 
       <section className="mt-8">
         <h2 className="px-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Maintenance</h2>

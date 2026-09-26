@@ -59,6 +59,11 @@ function capAliases(aliases: Record<string, string>): Record<string, string> {
 }
 
 /** Parses manifest JSON defensively; anything malformed falls back to defaults. */
+/** Repo JSON is untrusted: never let a key like "__proto__" reach a plain object. */
+function isSafeKey(key: string): boolean {
+  return key !== "__proto__" && key !== "constructor" && key !== "prototype";
+}
+
 export function parseManifest(text: string | null | undefined): Manifest {
   const base = emptyManifest();
   if (!text) return base;
@@ -80,6 +85,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
   const order: Record<string, string[]> = {};
   if (r["order"] && typeof r["order"] === "object") {
     for (const [k, v] of Object.entries(r["order"] as Record<string, unknown>)) {
+      if (!isSafeKey(k)) continue;
       if (Array.isArray(v)) order[k] = v.filter((x): x is string => typeof x === "string");
     }
   }
@@ -87,6 +93,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
   const labels: Record<string, ItemLabel> = {};
   if (r["labels"] && typeof r["labels"] === "object") {
     for (const [k, v] of Object.entries(r["labels"] as Record<string, unknown>)) {
+      if (!isSafeKey(k)) continue;
       if (v && typeof v === "object") {
         const l = v as Record<string, unknown>;
         const label: ItemLabel = {};
@@ -102,6 +109,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
   const aliases: Record<string, string> = {};
   if (r["aliases"] && typeof r["aliases"] === "object") {
     for (const [k, v] of Object.entries(r["aliases"] as Record<string, unknown>)) {
+      if (!isSafeKey(k)) continue;
       if (typeof v === "string") aliases[k] = v;
     }
   }

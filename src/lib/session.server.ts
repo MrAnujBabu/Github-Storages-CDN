@@ -1,4 +1,4 @@
-import { deleteCookie, getCookie, getRequest, getRequestHeader, setCookie } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, getRequestHeader, setCookie } from "@tanstack/react-start/server";
 
 /**
  * Owner sessions: an HMAC-signed, httpOnly cookie minted after the passcode
@@ -70,24 +70,16 @@ export async function verifySession(token: string | undefined | null): Promise<S
   }
 }
 
-function isSecureRequest(): boolean {
-  try {
-    const req = getRequest();
-    const proto = getRequestHeader("x-forwarded-proto");
-    if (proto) return proto.split(",")[0]!.trim() === "https";
-    return new URL(req.url).protocol === "https:";
-  } catch {
-    return true;
-  }
-}
-
 export async function setOwnerCookie(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const token = await signSession({ v: 1, iat: now, exp: now + SESSION_DAYS * 86400 });
   setCookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: isSecureRequest(),
+    // Always Secure: the app is HTTPS-only in production and browsers treat
+    // http://localhost as a secure context, so dev sign-in keeps working. Deciding
+    // this from x-forwarded-proto would let a client downgrade the cookie.
+    secure: true,
     path: "/",
     maxAge: SESSION_DAYS * 86400,
   });

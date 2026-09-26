@@ -19,17 +19,21 @@ export const DEFAULT_REPO: RepoRef = {
 /** Where the app keeps ordering, labels and settings inside the repo. */
 export const MANIFEST_PATH = ".library/manifest.json";
 
-/** jsDelivr refuses files over 50 MB; keep a safety margin. */
+/** Upload ceiling for a single file (Pages/Raw serve these fine). */
 export const MAX_FILE_BYTES = 48 * 1024 * 1024;
 
 /**
- * jsDelivr serves a GitHub repo only while the whole repo (at that branch) is
- * under 50 MB — above that every /gh/ link answers "Package size exceeded".
- * Source: jsDelivr README "Restrictions". Warn early so the owner can switch
- * the default link to GitHub Pages before links break.
+ * jsDelivr's documented GitHub restrictions: single files over 20 MB and
+ * packages over 150 MB are unsupported by default, and its package API stops
+ * listing this repo past a configured 50 MB ("Package size exceeded the
+ * configured limit of 50 MB"). Verified Sep 26 2026: at ~145 MB the /gh/ file
+ * URLs still return 200, so treat 50 MB as a warning threshold, not a hard
+ * outage — GitHub Pages stays the reliable default.
  */
 export const CDN_PACKAGE_LIMIT_BYTES = 50 * 1024 * 1024;
 export const CDN_PACKAGE_WARN_BYTES = 40 * 1024 * 1024;
+/** jsDelivr will not serve a single GitHub file larger than this. */
+export const CDN_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
 
 /** GitHub Pages published-site soft limit. */
 export const PAGES_SITE_LIMIT_BYTES = 1024 * 1024 * 1024;

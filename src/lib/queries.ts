@@ -6,6 +6,7 @@ import {
   checkFileLinks,
   getAllFolders,
   getBrowse,
+  getDeliveryHealth,
   getFile,
   getFolder,
   getKindFiles,
@@ -30,6 +31,14 @@ export const linkHealthQuery = (path: string, commit?: string | null) =>
     staleTime: 45_000,
     retry: 1,
   });
+
+/** Library-wide: are Pages / CDN / raw / Statically answering right now, and how fast. */
+export const deliveryHealthQuery = queryOptions({
+  queryKey: ["delivery-health"],
+  queryFn: () => getDeliveryHealth(),
+  staleTime: 45_000,
+  retry: 1,
+});
 
 export const folderQuery = (path: string) =>
   queryOptions({

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 import { AppShell } from "./AppShell";
 import { CopyLinkButton } from "./CopyLinkButton";
+import { DeliveryHealthCard } from "./DeliveryHealthCard";
 import { KindIcon } from "./KindIcon";
 
 /** Plain-language plural names for the category tiles. */
@@ -245,6 +246,8 @@ export function BrowseHome() {
             />
           </div>
           <p className="mt-1.5 text-[12px] text-muted-foreground tabular-nums">{pct}% bhara</p>
+
+          <DeliveryHealthCard variant="compact" className="mt-3 border-t border-border pt-3" />
 
           {nearLimit ? (
             <p className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">

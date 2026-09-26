@@ -369,6 +369,37 @@ export function visibleFolderPaths(snapshot: Snapshot, includeHidden: boolean): 
   );
 }
 
+/**
+ * A small, spread-out sample of public files for the library-wide link check:
+ * one file per top-level folder (root files count as one group), up to `limit`.
+ * Hidden files are never sampled — the result is shown to visitors too.
+ */
+export function sampleFiles(snapshot: Snapshot, limit = 4): string[] {
+  const groups = new Map<string, TreeEntry>();
+  const candidates = snapshot.files
+    .filter((e) => visibleFile(e) && !isHiddenPath(snapshot.manifest, e.path))
+    .sort((a, b) => naturalCompare(a.path, b.path));
+  for (const e of candidates) {
+    const top = e.path.includes("/") ? e.path.slice(0, e.path.indexOf("/")) : "";
+    const current = groups.get(top);
+    // Prefer PDFs (the library's main content), then the smaller file.
+    const better =
+      !current ||
+      (fileKind(e.path) === "pdf" && fileKind(current.path) !== "pdf") ||
+      (fileKind(e.path) === fileKind(current.path) && (e.size ?? 0) < (current.size ?? 0));
+    if (better) groups.set(top, e);
+  }
+  const picked = [...groups.values()].slice(0, limit).map((e) => e.path);
+  // Tiny libraries: top up with any remaining files so the check still has substance.
+  if (picked.length < limit) {
+    for (const e of candidates) {
+      if (picked.length >= limit) break;
+      if (!picked.includes(e.path)) picked.push(e.path);
+    }
+  }
+  return picked;
+}
+
 export function libraryStats(snapshot: Snapshot, includeHidden = false): LibraryStats {
   const byKind: Record<string, number> = {};
   let files = 0;
