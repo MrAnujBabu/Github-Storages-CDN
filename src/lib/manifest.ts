@@ -1,4 +1,4 @@
-import { ALL_LINK_STYLES, type LinkStyle } from "./links";
+import { ALL_LINK_STYLES, type LinkStyle, normalizeAppUrl } from "./links";
 import { naturalCompare } from "./paths";
 
 /**
@@ -14,6 +14,11 @@ export interface ItemLabel {
 
 export interface ManifestSettings {
   linkStyle: LinkStyle;
+  /**
+   * Public origin of this app (e.g. https://files.example.com). Viewer links are
+   * built on it so links copied inside a private preview still open for everyone.
+   */
+  appUrl?: string | undefined;
 }
 
 export interface Manifest {
@@ -70,6 +75,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
   const linkStyle = LINK_STYLES.includes(settings["linkStyle"] as LinkStyle)
     ? (settings["linkStyle"] as LinkStyle)
     : "pages";
+  const appUrl = normalizeAppUrl(typeof settings["appUrl"] === "string" ? settings["appUrl"] : null);
 
   const order: Record<string, string[]> = {};
   if (r["order"] && typeof r["order"] === "object") {
@@ -102,7 +108,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
 
   return {
     version: 1,
-    settings: { linkStyle },
+    settings: appUrl ? { linkStyle, appUrl } : { linkStyle },
     order,
     labels,
     hidden,

@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 import type { FileKind } from "./paths";
 
 import {
+  checkFileLinks,
   getAllFolders,
   getBrowse,
   getFile,
@@ -20,6 +21,15 @@ export const pagesQuery = queryOptions({
   queryFn: () => getPagesStatus(),
   staleTime: 30_000,
 });
+
+/** Live status of every link format for one file (keyed on the commit so a new upload re-checks). */
+export const linkHealthQuery = (path: string, commit?: string | null) =>
+  queryOptions({
+    queryKey: ["linkcheck", path, commit ?? ""],
+    queryFn: () => checkFileLinks({ data: { path } }),
+    staleTime: 45_000,
+    retry: 1,
+  });
 
 export const folderQuery = (path: string) =>
   queryOptions({

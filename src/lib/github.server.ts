@@ -83,13 +83,30 @@ function friendlyMessage(status: number, body: string): string {
   }
 }
 
-export async function ghFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const t = transport();
+function send(t: Transport, path: string, init: RequestInit): Promise<Response> {
   const url = `${t.base}/${path.replace(/^\//, "")}`;
   const headers = new Headers(init.headers);
   for (const [k, v] of Object.entries(t.headers)) if (!headers.has(k)) headers.set(k, v);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   return fetch(url, { ...init, headers });
+}
+
+export async function ghFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const t = transport();
+  const res = await send(t, path, init);
+  // Public reads must never break: if the connector credential is stale, read the public repo directly.
+  const method = (init.method ?? "GET").toUpperCase();
+  if (t.kind === "gateway" && res.status === 401 && method === "GET") {
+    console.warn(`[github] gateway 401 on ${path}; falling back to direct read`);
+    const token = process.env["GITHUB_TOKEN"];
+    const { Authorization: _a, "X-Connection-Api-Key": _k, ...common } = t.headers;
+    return send(
+      { kind: "direct", base: "https://api.github.com", headers: token ? { ...common, Authorization: `Bearer ${token}` } : common },
+      path,
+      init,
+    );
+  }
+  return res;
 }
 
 export async function ghJson<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {

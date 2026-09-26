@@ -134,3 +134,100 @@ export function htmlEmbed(url: string, title: string): string {
 export function linkStyleInfo(style: LinkStyle): LinkStyleInfo {
   return LINK_STYLES.find((s) => s.id === style) ?? LINK_STYLES[0]!;
 }
+
+/** Default style first, everything else in catalogue order — the sheet shows the link people actually copy on top. */
+export function orderedLinkStyles(defaultStyle: LinkStyle): LinkStyleInfo[] {
+  const first = LINK_STYLES.find((s) => s.id === defaultStyle);
+  return first ? [first, ...LINK_STYLES.filter((s) => s.id !== defaultStyle)] : LINK_STYLES;
+}
+
+/** Viewer deep link to one page of a PDF (`?page=N`). Page 1 stays the plain link. */
+export function withPage(url: string, page: number | null | undefined): string {
+  if (!page || page <= 1 || !Number.isFinite(page)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}page=${Math.floor(page)}`;
+}
+
+/** Parses `?page=` / `#page=` values; anything odd → undefined. */
+export function parsePage(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : NaN;
+  if (!Number.isFinite(n) || n < 1 || n > 100_000) return undefined;
+  return Math.floor(n);
+}
+
+/**
+ * Lovable preview / sandbox hosts need the owner's login, so a viewer link built
+ * there is invisible to everyone else. Published `.lovable.app` sites and custom
+ * domains are fine.
+ */
+export function isPreviewOrigin(origin: string | null | undefined): boolean {
+  if (!origin) return false;
+  try {
+    const host = new URL(origin).hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".lovableproject.com") ||
+      host.startsWith("id-preview--") ||
+      host.endsWith("-dev.lovable.app")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Normalises the owner-entered public address of this app: https(s) only, no
+ * path/query, no trailing slash. Returns null when it cannot be a public origin.
+ */
+export function normalizeAppUrl(input: string | null | undefined): string | null {
+  if (!input) return null;
+  let text = input.trim();
+  if (!text) return null;
+  if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
+  try {
+    const u = new URL(text);
+    const host = u.hostname.toLowerCase();
+    if (!host || host === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith("[")) return null;
+    if (!host.includes(".")) return null;
+    return `${u.protocol}//${u.host}`.replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------ link health ------------------------------ */
+
+export type LinkHealthState = "ok" | "pending" | "blocked" | "down" | "preview" | "skipped";
+
+export interface LinkHealth {
+  style: LinkStyle;
+  url: string;
+  state: LinkHealthState;
+  /** HTTP status when the request completed. */
+  status: number | null;
+  /** Round-trip time of the check in milliseconds. */
+  ms: number;
+  contentType: string | null;
+}
+
+/** Short Hinglish label + tone for one health result. */
+export function describeHealth(h: LinkHealth): { text: string; tone: "ok" | "warn" | "bad" | "muted" } {
+  switch (h.state) {
+    case "ok":
+      return { text: h.ms > 0 ? `Chal raha hai · ${h.ms} ms` : "Chal raha hai", tone: "ok" };
+    case "pending":
+      return {
+        text: h.style === "pages" ? "Abhi live nahi — 1 minute me aa jayega" : "Abhi index nahi hua — thodi der me",
+        tone: "warn",
+      };
+    case "blocked":
+      return { text: h.style === "cdn" || h.style === "cdn-pinned" ? "Block — repo 50 MB se bada" : `Block (${h.status})`, tone: "bad" };
+    case "down":
+      return { text: h.status ? `Nahi khula (${h.status})` : "Jawab nahi aaya", tone: "bad" };
+    case "preview":
+      return { text: "Preview link — sirf aapko khulega", tone: "warn" };
+    case "skipped":
+    default:
+      return { text: "Check nahi hua", tone: "muted" };
+  }
+}

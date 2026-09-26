@@ -3,13 +3,18 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { AppShell } from "@/components/library/AppShell";
 import { EmptyState, ErrorState } from "@/components/library/states";
 import { Viewer } from "@/components/library/Viewer";
-import { buildLink } from "@/lib/links";
+import { buildLink, parsePage } from "@/lib/links";
 import { kindLabel, formatBytes } from "@/lib/paths";
 import { fileQuery } from "@/lib/queries";
 import { splatToPath } from "@/lib/route-path";
 import { APP_NAME } from "@/lib/storage-config";
 
 export const Route = createFileRoute("/v/$")({
+  /** `?page=N` deep-links into a PDF page; anything else is dropped from the URL. */
+  validateSearch: (search: Record<string, unknown>): { page?: number } => {
+    const page = parsePage(search["page"]);
+    return page ? { page } : {};
+  },
   loader: async ({ context, params }) => {
     const path = splatToPath(params._splat);
     if (!path) throw notFound();
@@ -73,5 +78,6 @@ export const Route = createFileRoute("/v/$")({
 
 function ViewerRoute() {
   const { path } = Route.useLoaderData();
-  return <Viewer path={path} />;
+  const { page } = Route.useSearch();
+  return <Viewer path={path} page={page} />;
 }

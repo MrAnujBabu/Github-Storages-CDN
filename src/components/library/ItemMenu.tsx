@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCopy } from "@/hooks/useCopy";
-import { useOrigin } from "@/hooks/useOrigin";
+import { useLinkOrigin } from "@/hooks/useOrigin";
 import type { LibraryItem } from "@/lib/library-types";
 import { buildLink, type LinkStyle } from "@/lib/links";
 import type { RepoRef } from "@/lib/storage-config";
@@ -43,7 +43,7 @@ interface Props {
 /** The "…" menu on every row/card. Read-only actions for visitors, editing for the owner. */
 export function ItemMenu({ item, repo, commit, defaultStyle, isOwner, onAction, className }: Props) {
   const { copy } = useCopy();
-  const origin = useOrigin();
+  const origin = useLinkOrigin();
   const isFile = item.type === "file";
   const ctx = { repo, commit, origin: origin || (typeof window !== "undefined" ? window.location.origin : "") };
 

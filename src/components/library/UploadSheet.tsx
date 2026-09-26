@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { useCopy } from "@/hooks/useCopy";
-import { useOrigin } from "@/hooks/useOrigin";
+import { useLinkOrigin } from "@/hooks/useOrigin";
 import type { UploadResponse, UploadedEntry } from "@/lib/library-types";
 import { buildLink, type LinkStyle } from "@/lib/links";
 import { haptic } from "@/lib/haptics";
@@ -102,7 +102,7 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, on
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { copy, copied } = useCopy("Sabhi links copy ho gaye");
-  const origin = useOrigin();
+  const origin = useLinkOrigin();
 
   const targetFolder = useMemo(() => joinPath(folder, cleanFolderName(subfolder, { slug: clean })), [folder, subfolder, clean]);
 

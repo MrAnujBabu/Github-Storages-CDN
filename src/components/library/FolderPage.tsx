@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useCopy } from "@/hooks/useCopy";
 import { useLibraryActions } from "@/hooks/useLibraryActions";
-import { useOrigin } from "@/hooks/useOrigin";
+import { useLinkOrigin } from "@/hooks/useOrigin";
 import { useOwner } from "@/hooks/useOwner";
 import type { LibraryFile, LibraryItem } from "@/lib/library-types";
 import { buildLink } from "@/lib/links";
@@ -34,7 +34,7 @@ export function FolderPage({ path }: { path: string }) {
   const { isOwner, session } = useOwner();
   const actions = useLibraryActions();
   const { copy } = useCopy();
-  const origin = useOrigin();
+  const origin = useLinkOrigin();
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<ViewMode>("list");

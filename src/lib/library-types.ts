@@ -72,6 +72,8 @@ export interface SessionInfo {
   passcodeConfigured: boolean;
   githubConfigured: boolean;
   defaultLinkStyle: LinkStyle;
+  /** Owner-set public origin for viewer links; undefined → use the current page's origin. */
+  appUrl?: string | undefined;
 }
 
 export interface SearchHit {

@@ -27,19 +27,28 @@ interface Props {
   title: string;
   fallbackHref: string;
   className?: string;
+  /** Deep link target (`?page=N`): the viewer opens scrolled to this page. */
+  initialPage?: number | undefined;
+  /** Fires whenever the page nearest the top changes (and once with the page count). */
+  onPageChange?: ((page: number, numPages: number) => void) | undefined;
 }
 
 /** Continuous-scroll PDF viewer: fit-to-width, windowed rendering, zoom, page nav. */
-export default function PdfViewer({ url, title, fallbackHref, className }: Props) {
+export default function PdfViewer({ url, title, fallbackHref, className, initialPage, onPageChange }: Props) {
   const isMobile = useIsMobile();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [numPages, setNumPages] = useState(0);
   const [zoomIdx, setZoomIdx] = useState(2);
-  const [current, setCurrent] = useState(1);
+  const [current, setCurrent] = useState(() => (initialPage && initialPage > 1 ? initialPage : 1));
   const [ratio, setRatio] = useState(1.414); // height / width of page 1, A4 default
   const [error, setError] = useState<string | null>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const jumpedRef = useRef(false);
+
+  useEffect(() => {
+    if (numPages > 0) onPageChange?.(current, numPages);
+  }, [current, numPages, onPageChange]);
 
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
   const gutter = isMobile ? 8 : 24;
@@ -57,7 +66,8 @@ export default function PdfViewer({ url, title, fallbackHref, className }: Props
     return () => ro.disconnect();
   }, []);
 
-  // Track the page nearest the top of the viewport.
+  // Track the page with the most visible area (earliest page wins ties), so
+  // short landscape pages — where 3 fit on one screen — still count from the top.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !numPages) return;
@@ -65,10 +75,17 @@ export default function PdfViewer({ url, title, fallbackHref, className }: Props
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const top = el.scrollTop + el.clientHeight * 0.35;
+        const vTop = el.scrollTop;
+        const vBot = vTop + el.clientHeight;
         let best = 1;
+        let bestVis = -1;
         for (const [n, node] of pageRefs.current) {
-          if (node.offsetTop <= top) best = Math.max(best, n);
+          const t = node.offsetTop;
+          const vis = Math.min(t + node.offsetHeight, vBot) - Math.max(t, vTop);
+          if (vis > bestVis || (vis === bestVis && n < best)) {
+            bestVis = vis;
+            best = n;
+          }
         }
         setCurrent(best);
       });
@@ -80,12 +97,34 @@ export default function PdfViewer({ url, title, fallbackHref, className }: Props
     };
   }, [numPages]);
 
-  const goTo = useCallback((n: number) => {
+  const goTo = useCallback((n: number, behavior: ScrollBehavior = "smooth") => {
     const node = pageRefs.current.get(n);
     const el = scrollRef.current;
     if (!node || !el) return;
-    el.scrollTo({ top: node.offsetTop - 8, behavior: "smooth" });
+    el.scrollTo({ top: node.offsetTop - 8, behavior });
   }, []);
+
+  // Deep link: jump once the target page's wrapper exists. react-pdf mounts the
+  // page list a render after onLoadSuccess, so poll briefly instead of firing once.
+  useEffect(() => {
+    if (jumpedRef.current || !numPages || !initialPage || initialPage <= 1) return;
+    const target = Math.min(numPages, initialPage);
+    let tries = 0;
+    let timer = 0;
+    const attempt = () => {
+      const node = pageRefs.current.get(target);
+      const el = scrollRef.current;
+      if (node && el && node.offsetTop > 0) {
+        el.scrollTo({ top: node.offsetTop - 8 });
+        jumpedRef.current = true;
+        setCurrent(target);
+        return;
+      }
+      if (++tries < 60) timer = window.setTimeout(attempt, 50);
+    };
+    attempt();
+    return () => window.clearTimeout(timer);
+  }, [numPages, initialPage]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

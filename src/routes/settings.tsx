@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Check, ExternalLink, Github, Globe, LogOut, RefreshCw, Zap } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Check, ExternalLink, Github, Globe, Link2, LogOut, RefreshCw, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { AppShell, PageTitle } from "@/components/library/AppShell";
 import { KindIcon } from "@/components/library/KindIcon";
@@ -16,10 +16,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLibraryActions } from "@/hooks/useLibraryActions";
+import { useOrigin } from "@/hooks/useOrigin";
 import { useOwner } from "@/hooks/useOwner";
-import { LINK_STYLES, buildLink, pagesBaseUrl, type LinkStyle } from "@/lib/links";
+import { LINK_STYLES, buildLink, isPreviewOrigin, normalizeAppUrl, pagesBaseUrl, type LinkStyle } from "@/lib/links";
 import { haptic } from "@/lib/haptics";
 import { type FileKind, formatBytes, kindLabel } from "@/lib/paths";
 import { pagesQuery, statsQuery } from "@/lib/queries";
@@ -129,6 +131,8 @@ function SettingsPage() {
           })}
         </ul>
       </section>
+
+      <AppAddressSection saved={session.appUrl} busy={actions.busy} onSave={(url) => actions.setAppUrl(url)} />
 
       <section className="mt-8">
         <h2 className="px-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Storage</h2>
@@ -359,6 +363,102 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{value}</dd>
     </div>
+  );
+}
+
+/**
+ * Public address the viewer links are built on. Inside the Lovable preview the
+ * page's own origin needs the owner's login, so without this every copied
+ * viewer link is private — the section says so and offers the fix.
+ */
+function AppAddressSection({ saved, busy, onSave }: { saved: string | undefined; busy: boolean; onSave: (url: string) => Promise<unknown> }) {
+  const origin = useOrigin();
+  const [draft, setDraft] = useState(saved ?? "");
+  useEffect(() => setDraft(saved ?? ""), [saved]);
+
+  const onPreview = isPreviewOrigin(origin);
+  const normalized = normalizeAppUrl(draft);
+  const draftIsPreview = !!normalized && isPreviewOrigin(normalized);
+  const dirty = (normalized ?? "") !== (saved ?? "");
+  const canUseCurrent = !!origin && !onPreview && origin !== saved;
+
+  return (
+    <section className="mt-8">
+      <h2 className="px-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Viewer link ka address</h2>
+      <p className="mt-1 px-1 text-[13px] text-muted-foreground">
+        "Viewer link" is app ke page par khulta hai. Yahan published address dalo taaki preview se copy kiya link bhi sabko khule.
+      </p>
+      <div className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <Link2 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-medium text-foreground">App ka public address</p>
+            {saved ? (
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Abhi: <code className="font-mono text-foreground/80">{saved}</code> — viewer links isi par ban rahe hain.
+              </p>
+            ) : onPreview ? (
+              <p role="alert" className="mt-0.5 text-[12.5px] text-destructive">
+                Set nahi hai, aur aap preview mein ho — abhi copy kiye viewer links sirf aapko khulenge. Pehle app Publish karo, phir wo address yahan dalo.
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">Set nahi hai — abhi isi page ka address use hota hai, jo theek hai.</p>
+            )}
+          </div>
+        </div>
+
+        <form
+          className="mt-4 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!normalized || draftIsPreview || busy) return;
+            haptic("selection");
+            void onSave(normalized);
+          }}
+        >
+          <Input
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="https://aapki-site.lovable.app"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label="App ka public address"
+            aria-invalid={!!draft.trim() && (!normalized || draftIsPreview)}
+            className="h-11 rounded-lg font-mono text-[13px]"
+          />
+          <div className="flex gap-2">
+            <Button type="submit" className="pressable h-11 flex-1 rounded-lg sm:flex-none" disabled={busy || !normalized || draftIsPreview || !dirty}>
+              Save
+            </Button>
+            {saved ? (
+              <Button type="button" variant="outline" className="pressable h-11 rounded-lg" disabled={busy} onClick={() => void onSave("")}>
+                Hatao
+              </Button>
+            ) : null}
+          </div>
+        </form>
+
+        {draft.trim() && !normalized ? (
+          <p className="mt-2 text-[12.5px] text-destructive">Poora address likho, jaise https://files.example.com</p>
+        ) : draftIsPreview ? (
+          <p className="mt-2 text-[12.5px] text-destructive">Ye preview address hai — bahar walon ko nahi khulega. Publish ke baad wala address dalo.</p>
+        ) : null}
+
+        {canUseCurrent ? (
+          <button
+            type="button"
+            className="mt-3 text-[13px] font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => setDraft(origin)}
+          >
+            Abhi wala address bharo ({origin.replace(/^https?:\/\//, "")})
+          </button>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

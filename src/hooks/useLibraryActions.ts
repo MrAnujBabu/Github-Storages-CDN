@@ -93,6 +93,9 @@ export function useLibraryActions() {
     setHidden: (path: string, hidden: boolean) =>
       run(() => fns.setHidden({ data: { path, hidden } }), hidden ? "Visitors se chhup gaya" : "Sabko dikh raha hai"),
     setLinkStyle: (linkStyle: LinkStyle) => run(() => fns.updateSettings({ data: { linkStyle } }), "Default link badal gaya"),
+    /** Empty string clears the public address; viewer links fall back to the current origin. */
+    setAppUrl: (appUrl: string) =>
+      run(() => fns.updateSettings({ data: { appUrl } }), appUrl.trim() ? "App ka address save ho gaya — viewer links ab isi par banenge" : "App ka address hata diya"),
     purgeAll: () => run(() => fns.purgeCdn({ data: {} }), "CDN cache refresh ho gaya"),
     refresh: () => run(() => fns.refreshLibrary(), "Library refresh ho gayi"),
     enablePages: () => run(() => fns.enablePages(), "GitHub Pages chalu ho gaya — 1-2 minute mein live"),

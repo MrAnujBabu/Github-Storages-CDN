@@ -3,7 +3,7 @@ import { Check, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopy } from "@/hooks/useCopy";
-import { useOrigin } from "@/hooks/useOrigin";
+import { useLinkOrigin } from "@/hooks/useOrigin";
 import { buildLink, linkStyleInfo, type LinkStyle } from "@/lib/links";
 import type { RepoRef } from "@/lib/storage-config";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ interface Props {
 /** One tap → the default-style link is on the clipboard. */
 export function CopyLinkButton({ path, repo, commit, style, variant = "icon", className, label }: Props) {
   const { copy, copied } = useCopy();
-  const origin = useOrigin();
+  const origin = useLinkOrigin();
   const info = linkStyleInfo(style);
 
   const onClick = (e: React.MouseEvent) => {

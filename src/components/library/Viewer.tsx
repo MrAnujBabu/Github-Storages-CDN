@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { ClientOnly, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink, Github, Link2, MoreHorizontal } from "lucide-react";
-import { Component, type ReactNode, Suspense, lazy, useEffect, useState } from "react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Download, ExternalLink, Github, Link2, MoreHorizontal, Share2 } from "lucide-react";
+import { Component, type ReactNode, Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import nbLogo from "@/assets/nb-logo.png";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCopy } from "@/hooks/useCopy";
 import { useOwner } from "@/hooks/useOwner";
 import { rememberRecent } from "@/hooks/useRecents";
-import { useOrigin } from "@/hooks/useOrigin";
-import { buildLink } from "@/lib/links";
+import { useLinkOrigin } from "@/hooks/useOrigin";
+import { buildLink, parsePage, withPage } from "@/lib/links";
 import { haptic } from "@/lib/haptics";
 import { formatBytes, kindLabel } from "@/lib/paths";
 import { fileQuery } from "@/lib/queries";
+import { canShare, shareLink } from "@/lib/share";
 
 import { CopyLinkButton } from "./CopyLinkButton";
 import { KindIcon } from "./KindIcon";
@@ -68,12 +70,23 @@ class PdfBoundary extends Component<{ href: string; children: ReactNode }, { fai
   }
 }
 
-export function Viewer({ path }: { path: string }) {
+export function Viewer({ path, page }: { path: string; page?: number | undefined }) {
   const { data } = useSuspenseQuery(fileQuery(path));
   const { session } = useOwner();
-  const origin = useOrigin();
+  const origin = useLinkOrigin();
   const navigate = useNavigate();
+  const { copy } = useCopy();
   const [linksOpen, setLinksOpen] = useState(false);
+  const [pdfPage, setPdfPage] = useState<{ page: number; total: number } | null>(null);
+  const [shareable, setShareable] = useState(false);
+  // `#page=N` (Adobe-style) also works; the hash never reaches the server, so read it after hydration.
+  const [hashPage, setHashPage] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    setShareable(canShare());
+    const m = /[#&]page=(\d+)/.exec(window.location.hash);
+    setHashPage(m ? parsePage(m[1]) : undefined);
+  }, [path]);
+  const onPageChange = useCallback((p: number, total: number) => setPdfPage({ page: p, total }), []);
 
   // Loader already threw notFound() when null; keep a guard for cache races.
   if (!data) return null;
@@ -83,6 +96,9 @@ export function Viewer({ path }: { path: string }) {
   const cdn = buildLink("cdn", file.path, ctx);
   const folder = crumbs[crumbs.length - 1];
   const title = file.title ?? file.name;
+  const initialPage = page ?? hashPage;
+  const viewerLink = buildLink("viewer", file.path, ctx);
+  const currentPage = pdfPage && pdfPage.page > 1 ? pdfPage.page : undefined;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -103,6 +119,11 @@ export function Viewer({ path }: { path: string }) {
       ...(file.title ? { title: file.title } : {}),
     });
   }, [file.path, file.name, file.kind, file.size, file.title]);
+
+  const onShare = () => {
+    haptic("light");
+    void shareLink({ title, url: buildLink(defaultStyle, file.path, ctx), text: `${title} · ${kindLabel(file.kind)}` });
+  };
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -170,11 +191,26 @@ export function Viewer({ path }: { path: string }) {
                   <MoreHorizontal className="h-[18px] w-[18px]" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 rounded-xl p-1.5 shadow-float">
+              <DropdownMenuContent align="end" className="w-64 rounded-xl p-1.5 shadow-float">
                 <DropdownMenuItem className="h-10 rounded-lg" onSelect={() => setLinksOpen(true)}>
                   <Link2 className="h-4 w-4" />
                   Sabhi link formats…
                 </DropdownMenuItem>
+                {currentPage ? (
+                  <DropdownMenuItem
+                    className="h-10 rounded-lg"
+                    onSelect={() => void copy(withPage(viewerLink, currentPage), `Page ${currentPage} ka link copy ho gaya`)}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    Page {currentPage} ka link copy karo
+                  </DropdownMenuItem>
+                ) : null}
+                {shareable ? (
+                  <DropdownMenuItem className="h-10 rounded-lg" onSelect={onShare}>
+                    <Share2 className="h-4 w-4" />
+                    Share karo…
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="h-10 rounded-lg">
                   <a href={cdn} download={file.name} target="_blank" rel="noopener noreferrer">
@@ -228,7 +264,7 @@ export function Viewer({ path }: { path: string }) {
       {file.kind === "pdf" ? (
         <ClientOnly fallback={<ViewerFallback />}>
           <Suspense fallback={<ViewerFallback />}>
-            <PdfViewer key={file.path} url={cdn} title={title} fallbackHref={cdn} />
+            <PdfViewer key={file.path} url={cdn} title={title} fallbackHref={cdn} initialPage={initialPage} onPageChange={onPageChange} />
           </Suspense>
         </ClientOnly>
       ) : file.kind === "image" ? (
@@ -296,6 +332,7 @@ export function Viewer({ path }: { path: string }) {
         repo={repo}
         commit={headSha}
         defaultStyle={defaultStyle}
+        page={currentPage}
       />
     </div>
   );

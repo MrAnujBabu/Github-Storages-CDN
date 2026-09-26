@@ -3,6 +3,7 @@ import { setResponseStatus } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import type { BrowseView, FileDetail, FolderView, KindListing, LibraryStats, PagesInfo, SearchHit, SessionInfo } from "./library-types";
+import { type LinkHealth, isPreviewOrigin, normalizeAppUrl } from "./links";
 import type { ManifestSettings } from "./manifest";
 
 /**
@@ -101,9 +102,11 @@ export const getSession = createServerFn({ method: "GET" }).handler(async (): Pr
   const { getRepoConfig, loadSnapshot } = await import("./library.server");
   const signedIn = await isOwner();
   let defaultLinkStyle: SessionInfo["defaultLinkStyle"] = "pages";
+  let appUrl: string | undefined;
   try {
     const snapshot = await loadSnapshot();
     defaultLinkStyle = snapshot.manifest.settings.linkStyle;
+    appUrl = snapshot.manifest.settings.appUrl;
   } catch {
     // repo unreachable — the folder view reports the real error
   }
@@ -113,8 +116,29 @@ export const getSession = createServerFn({ method: "GET" }).handler(async (): Pr
     passcodeConfigured: isPasscodeConfigured(),
     githubConfigured: isGitHubConfigured(),
     defaultLinkStyle,
+    appUrl,
   };
 });
+
+/**
+ * Probes every link format of one file from the server (HEAD requests) so the
+ * link sheet can show "chal raha hai / abhi live nahi / block" per row.
+ * Public like the other reads; results are cached server-side for ~45 s.
+ */
+export const checkFileLinks = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ path: z.string().min(1).max(900) }).parse(input))
+  .handler(async ({ data }): Promise<LinkHealth[]> => {
+    const { findFileDetail, loadSnapshot } = await import("./library.server");
+    const { isOwner } = await import("./session.server");
+    const { checkLinks } = await import("./linkcheck.server");
+    const [snapshot, owner] = await Promise.all([loadSnapshot(), isOwner()]);
+    const detail = findFileDetail(snapshot, data.path, owner);
+    if (!detail) {
+      setResponseStatus(404);
+      throw new Error("Ye file library mein nahi mili.");
+    }
+    return checkLinks(detail.repo, detail.headSha, detail.file.path, detail.settings.appUrl);
+  });
 
 /* ------------------------------ auth ------------------------------- */
 
@@ -227,11 +251,36 @@ export const setHidden = createServerFn({ method: "POST" })
 
 export const updateSettings = createServerFn({ method: "POST" })
   .middleware([ownerOnly])
-  .validator((input: unknown) => z.object({ linkStyle: linkStyleSchema.optional() }).parse(input))
+  .validator((input: unknown) =>
+    z
+      .object({
+        linkStyle: linkStyleSchema.optional(),
+        /** Public origin for viewer links; empty string clears it. */
+        appUrl: z.string().max(200).optional(),
+      })
+      .parse(input),
+  )
   .handler(async ({ data }): Promise<ManifestSettings> => {
     const lib = await import("./library.server");
     const patch: Partial<ManifestSettings> = {};
     if (data.linkStyle) patch.linkStyle = data.linkStyle;
+    if (data.appUrl !== undefined) {
+      const trimmed = data.appUrl.trim();
+      if (trimmed) {
+        const clean = normalizeAppUrl(trimmed);
+        if (!clean) {
+          setResponseStatus(400);
+          throw new Error("Address samajh nahi aaya — https://aapki-site.app jaisa poora address likho.");
+        }
+        if (isPreviewOrigin(clean)) {
+          setResponseStatus(400);
+          throw new Error("Ye preview address hai — bahar walon ko nahi khulega. Pehle Publish karo, phir published address yahan daalo.");
+        }
+        patch.appUrl = clean;
+      } else {
+        patch.appUrl = undefined;
+      }
+    }
     return withStatus(() => lib.saveSettings(patch));
   });
 
