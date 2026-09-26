@@ -62,7 +62,7 @@ export async function verifySession(token: string | undefined | null): Promise<S
     const ok = await crypto.subtle.verify("HMAC", key, sigBytes.slice().buffer as ArrayBuffer, enc.encode(body));
     if (!ok) return null;
     const payload = JSON.parse(Buffer.from(fromB64url(body)).toString("utf8")) as SessionPayload;
-    if (payload.v !== 1 || typeof payload.exp !== "number") return null;
+    if (payload.v !== 1 || typeof payload.exp !== "number" || typeof payload.iat !== "number") return null;
     if (payload.exp * 1000 < Date.now()) return null;
     return payload;
   } catch {
@@ -155,6 +155,8 @@ export function checkAttempts(key: string): { blocked: boolean; retryInSec: numb
 
 export function recordFailure(key: string): void {
   const now = Date.now();
+  // Bound the map: spoofed X-Forwarded-For headers could otherwise grow it forever.
+  if (attempts.size > 5000) attempts.clear();
   const rec = attempts.get(key);
   if (!rec || rec.until < now) attempts.set(key, { count: 1, until: now + WINDOW_MS });
   else rec.count += 1;

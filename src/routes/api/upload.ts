@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { MAX_BATCH_BYTES, MAX_FILES_PER_UPLOAD, MAX_FILE_BYTES } from "@/lib/storage-config";
+import { ALLOWED_FILE_EXTS, MAX_BATCH_BYTES, MAX_FILES_PER_UPLOAD, MAX_FILE_BYTES } from "@/lib/storage-config";
 
 /**
  * Multipart upload endpoint used by the upload sheet (XHR, so the browser can
@@ -63,11 +63,6 @@ export const Route = createFileRoute("/api/upload")({
         }
 
         // Only study-material formats; no HTML/SVG/scripts/executables.
-        const ALLOWED = new Set([
-          "pdf", "png", "jpg", "jpeg", "gif", "webp",
-          "doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx", "odt", "ods", "odp",
-          "txt", "md", "rtf", "epub", "zip",
-        ]);
         const startsWith = (b: Buffer, sig: number[]) => sig.every((v, i) => b[i] === v);
         const contentMatches = (ext: string, b: Buffer): boolean => {
           switch (ext) {
@@ -95,7 +90,7 @@ export const Route = createFileRoute("/api/upload")({
           if (f.size === 0) return json({ error: `"${f.name}" khaali file hai.` }, 400);
           const name = cleanFileName(f.name, { slug: clean });
           const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-          if (!ALLOWED.has(ext)) {
+          if (!ALLOWED_FILE_EXTS.has(ext)) {
             return json({ error: `"${f.name}" is type ki file upload nahi hoti — PDF, photo, doc, sheet ya slides bhejo.` }, 415);
           }
           const buf = Buffer.from(await f.arrayBuffer());

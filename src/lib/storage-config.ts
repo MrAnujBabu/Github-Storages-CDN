@@ -44,6 +44,17 @@ export const MAX_BATCH_BYTES = 40 * 1024 * 1024;
 /** Max files per single upload request. */
 export const MAX_FILES_PER_UPLOAD = 20;
 
+/**
+ * Extensions the library accepts — study material only, no HTML/SVG/scripts.
+ * Enforced on upload AND on rename (renaming notes.pdf → notes.html would
+ * otherwise turn Pages into a host for arbitrary web pages).
+ */
+export const ALLOWED_FILE_EXTS: ReadonlySet<string> = new Set([
+  "pdf", "png", "jpg", "jpeg", "gif", "webp",
+  "doc", "docx", "xls", "xlsx", "csv", "ppt", "pptx", "odt", "ods", "odp",
+  "txt", "md", "rtf", "epub", "zip",
+]);
+
 export const APP_NAME = "Naveen Bharat Files";
 export const APP_TAGLINE = "Notes, PDFs aur images — GitHub par store, CDN se deliver.";
 

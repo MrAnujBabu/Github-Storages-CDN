@@ -47,6 +47,7 @@ import {
   cleanFileName,
   type FileKind,
   cleanFolderName,
+  extensionOf,
   fileKind,
   isHiddenEntry,
   isSafeName,
@@ -56,7 +57,7 @@ import {
   normalizePath,
   parentPath,
 } from "./paths";
-import { DEFAULT_REPO, MANIFEST_PATH, MAX_FILE_BYTES, parseRepoSpec, type RepoRef } from "./storage-config";
+import { ALLOWED_FILE_EXTS, DEFAULT_REPO, MANIFEST_PATH, MAX_FILE_BYTES, parseRepoSpec, type RepoRef } from "./storage-config";
 
 /* ------------------------------------------------------------------ */
 /* Config + snapshot                                                   */
@@ -590,6 +591,16 @@ export async function renameOrMove(path: string, target: string): Promise<{ from
   if (affected.length === 0) throw new LibraryError("Ye item ab repo mein nahi hai.", 404);
   const isFolder = !(affected.length === 1 && affected[0]!.path === from);
 
+  // Renaming a file must not bypass the upload type check: without this,
+  // notes.pdf → notes.html would turn GitHub Pages into a host for arbitrary
+  // web pages (scripts included) on the library's own domain.
+  if (!isFolder) {
+    const ext = extensionOf(to);
+    if (!ALLOWED_FILE_EXTS.has(ext)) {
+      throw new LibraryError(`".${ext || "bin"}" type ki file library mein nahi rakhi ja sakti — PDF, photo, doc, sheet ya slides hi allowed hain.`, 415);
+    }
+  }
+
   const clash = caseClash(snapshot, to, from);
   if (clash) {
     const exact = clash === to || clash.startsWith(to + "/");
@@ -605,7 +616,9 @@ export async function renameOrMove(path: string, target: string): Promise<{ from
     const newPath = e.path === from ? to : to + e.path.slice(from.length);
     changes.push({ path: e.path, sha: null });
     changes.push({ path: newPath, sha: e.sha });
-    purge.push(e.path);
+    // Purge both sides: the old URL must die, and the new URL may hold a
+    // cached 404 from someone guessing the name earlier.
+    purge.push(e.path, newPath);
   }
   const manifest = renameInManifest(snapshot.manifest, from, to);
   changes.push(manifestChange(manifest));
@@ -749,7 +762,7 @@ export async function moveMany(paths: string[], toFolder: string): Promise<{ mov
       changes.push({ path: newPath, sha: e.sha });
       taken.delete(e.path);
       taken.add(newPath);
-      purge.push(e.path);
+      purge.push(e.path, newPath);
     }
     manifest = renameInManifest(manifest, from, to);
     moved++;
