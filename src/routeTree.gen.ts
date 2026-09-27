@@ -16,6 +16,8 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
+import { Route as ApiUploadFinishRouteImport } from './routes/api/upload-finish'
+import { Route as ApiUploadPrepareRouteImport } from './routes/api/upload-prepare'
 import { Route as CKindRouteImport } from './routes/c.$kind'
 import { Route as FSplatRouteImport } from './routes/f.$'
 import { Route as VSplatRouteImport } from './routes/v.$'
@@ -55,6 +57,16 @@ const ApiUploadRoute = ApiUploadRouteImport.update({
   path: '/api/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiUploadFinishRoute = ApiUploadFinishRouteImport.update({
+  id: '/api/upload-finish',
+  path: '/api/upload-finish',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUploadPrepareRoute = ApiUploadPrepareRouteImport.update({
+  id: '/api/upload-prepare',
+  path: '/api/upload-prepare',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CKindRoute = CKindRouteImport.update({
   id: '/c/$kind',
   path: '/c/$kind',
@@ -79,6 +91,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/upload-finish': typeof ApiUploadFinishRoute
+  '/api/upload-prepare': typeof ApiUploadPrepareRoute
   '/c/$kind': typeof CKindRoute
   '/f/$': typeof FSplatRoute
   '/v/$': typeof VSplatRoute
@@ -91,6 +105,8 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/upload-finish': typeof ApiUploadFinishRoute
+  '/api/upload-prepare': typeof ApiUploadPrepareRoute
   '/c/$kind': typeof CKindRoute
   '/f/$': typeof FSplatRoute
   '/v/$': typeof VSplatRoute
@@ -104,6 +120,8 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/api/upload': typeof ApiUploadRoute
+  '/api/upload-finish': typeof ApiUploadFinishRoute
+  '/api/upload-prepare': typeof ApiUploadPrepareRoute
   '/c/$kind': typeof CKindRoute
   '/f/$': typeof FSplatRoute
   '/v/$': typeof VSplatRoute
@@ -118,6 +136,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sign-in'
     | '/api/upload'
+    | '/api/upload-finish'
+    | '/api/upload-prepare'
     | '/c/$kind'
     | '/f/$'
     | '/v/$'
@@ -130,6 +150,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sign-in'
     | '/api/upload'
+    | '/api/upload-finish'
+    | '/api/upload-prepare'
     | '/c/$kind'
     | '/f/$'
     | '/v/$'
@@ -142,6 +164,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sign-in'
     | '/api/upload'
+    | '/api/upload-finish'
+    | '/api/upload-prepare'
     | '/c/$kind'
     | '/f/$'
     | '/v/$'
@@ -155,6 +179,8 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SignInRoute: typeof SignInRoute
   ApiUploadRoute: typeof ApiUploadRoute
+  ApiUploadFinishRoute: typeof ApiUploadFinishRoute
+  ApiUploadPrepareRoute: typeof ApiUploadPrepareRoute
   CKindRoute: typeof CKindRoute
   FSplatRoute: typeof FSplatRoute
   VSplatRoute: typeof VSplatRoute
@@ -211,6 +237,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/upload-finish': {
+      id: '/api/upload-finish'
+      path: '/api/upload-finish'
+      fullPath: '/api/upload-finish'
+      preLoaderRoute: typeof ApiUploadFinishRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/upload-prepare': {
+      id: '/api/upload-prepare'
+      path: '/api/upload-prepare'
+      fullPath: '/api/upload-prepare'
+      preLoaderRoute: typeof ApiUploadPrepareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/c/$kind': {
       id: '/c/$kind'
       path: '/c/$kind'
@@ -243,6 +283,8 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SignInRoute: SignInRoute,
   ApiUploadRoute: ApiUploadRoute,
+  ApiUploadFinishRoute: ApiUploadFinishRoute,
+  ApiUploadPrepareRoute: ApiUploadPrepareRoute,
   CKindRoute: CKindRoute,
   FSplatRoute: FSplatRoute,
   VSplatRoute: VSplatRoute,

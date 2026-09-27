@@ -580,6 +580,60 @@ export async function uploadFiles(
   return { commitSha: result.commitSha, uploaded };
 }
 
+export interface IncomingBlob {
+  name: string;
+  size: number;
+  /** Sha of a blob the browser already pushed straight to GitHub. */
+  blobSha: string;
+}
+
+/**
+ * Same as uploadFiles, but the file bytes never pass through this server —
+ * the browser created GitHub blobs directly (avoids the ~4.5 MB serverless
+ * request-body limit that made large files fail with HTTP 413). Here we only
+ * place the existing blob shas into the tree and commit.
+ */
+export async function uploadBlobFiles(
+  folder: string,
+  incoming: IncomingBlob[],
+): Promise<{ commitSha: string; uploaded: UploadedEntry[] }> {
+  const folderClean = assertFolderPath(folder);
+  if (incoming.length === 0) throw new LibraryError("Koi file nahi mili.");
+  for (const f of incoming) {
+    if (!isSafeName(f.name)) throw new LibraryError(`"${f.name}" ka naam theek nahi hai.`);
+    if (f.size > MAX_FILE_BYTES) throw new LibraryError(`"${f.name}" 48 MB se badi hai — CDN itni badi file serve nahi karta.`, 413);
+  }
+  const snapshot = await loadSnapshot({ fresh: true });
+  const changes: TreeChange[] = [];
+  const uploaded: UploadedEntry[] = [];
+  const purge: string[] = [];
+  const seen = new Set<string>();
+  for (const f of incoming) {
+    const path = joinPath(folderClean, f.name);
+    const lower = path.toLowerCase();
+    if (seen.has(lower)) throw new LibraryError(`"${f.name}" do baar chuni gayi hai (bas letters ka case alag) — ek rakho.`);
+    seen.add(lower);
+    const replaced = snapshot.files.some((e) => e.path === path);
+    if (!replaced) {
+      const clash = caseClash(snapshot, path);
+      if (clash) {
+        throw new LibraryError(`"${baseName(clash)}" naam ki file pehle se hai (bas letters ka case alag) — pehle use rename ya delete karo.`, 409);
+      }
+    }
+    changes.push({ path, sha: f.blobSha });
+    uploaded.push({ name: f.name, path, size: f.size, replaced });
+    if (replaced) purge.push(path);
+  }
+  // A folder created through the app has a .keep placeholder; drop it once real files arrive.
+  const keep = folderClean ? `${folderClean}/.keep` : null;
+  if (keep && snapshot.files.some((e) => e.path === keep)) changes.push({ path: keep, sha: null });
+
+  const label = uploaded.length === 1 ? `Upload ${uploaded[0]!.name}` : `Upload ${uploaded.length} files to ${folderClean || "root"}`;
+  const result = await commit(snapshot, changes, label);
+  if (purge.length) await purgeCdnPaths(snapshot.repo, purge);
+  return { commitSha: result.commitSha, uploaded };
+}
+
 export async function renameOrMove(path: string, target: string): Promise<{ from: string; to: string }> {
   const from = normalizePath(path);
   // The last segment is user-typed: strip characters that break URLs, same as uploads do.

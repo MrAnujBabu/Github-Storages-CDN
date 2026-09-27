@@ -40,55 +40,84 @@ interface Props {
   onUploaded: (commitSha: string) => void | Promise<void>;
 }
 
-/** Keep a single request well under Worker memory/body limits; large files go alone. */
-const BATCH_BYTES = 16 * 1024 * 1024;
-const BATCH_FILES = 4;
+/**
+ * Direct upload flow: file bytes go STRAIGHT from the browser to GitHub's
+ * blob API, so they never pass through the app server. Serverless hosts cap
+ * request bodies at ~4.5 MB (Vercel) — routing bytes through /api/upload made
+ * every larger file fail with HTTP 413. The server only sees tiny JSON now.
+ */
 
-function makeBatches(files: QueuedFile[]): QueuedFile[][] {
-  const batches: QueuedFile[][] = [];
-  let cur: QueuedFile[] = [];
-  let curBytes = 0;
-  for (const f of files) {
-    const size = f.file.size;
-    if (cur.length && (curBytes + size > BATCH_BYTES || cur.length >= BATCH_FILES)) {
-      batches.push(cur);
-      cur = [];
-      curBytes = 0;
-    }
-    cur.push(f);
-    curBytes += size;
-  }
-  if (cur.length) batches.push(cur);
-  return batches;
+interface PrepareResponse {
+  ok: boolean;
+  token: string;
+  repo: RepoRef;
+  error?: string;
 }
 
-function postBatch(
-  folder: string,
-  clean: boolean,
-  files: File[],
-  onProgress: (ratio: number) => void,
-): Promise<UploadResponse> {
+async function prepareUpload(): Promise<PrepareResponse> {
+  const res = await fetch("/api/upload-prepare", { method: "POST" });
+  const body = (await res.json().catch(() => null)) as PrepareResponse | null;
+  if (!res.ok || !body?.ok) throw new Error(body?.error || `Upload shuru nahi hua (HTTP ${res.status}).`);
+  return body;
+}
+
+function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.set("folder", folder);
-    form.set("clean", clean ? "1" : "0");
-    for (const f of files) form.append("files", f, f.name);
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("File padh nahi paaye — dobara try karo."));
+    reader.onload = () => {
+      const url = String(reader.result ?? "");
+      const comma = url.indexOf(",");
+      resolve(comma >= 0 ? url.slice(comma + 1) : url);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function createBlob(
+  token: string,
+  repo: RepoRef,
+  base64: string,
+  onProgress: (ratio: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
+    xhr.open("POST", `https://api.github.com/repos/${repo.owner}/${repo.repo}/git/blobs`);
     xhr.responseType = "json";
     xhr.timeout = 10 * 60 * 1000;
+    xhr.setRequestHeader("Accept", "application/vnd.github+json");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("X-GitHub-Api-Version", "2022-11-28");
+    xhr.setRequestHeader("Content-Type", "application/json");
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.min(1, e.loaded / e.total));
     };
     xhr.onerror = () => reject(new Error("Network toot gaya — internet check karke dobara try karo."));
-    xhr.ontimeout = () => reject(new Error("Upload mein bahut der lagi — chhoti batch mein try karo."));
+    xhr.ontimeout = () => reject(new Error("Upload mein bahut der lagi — dobara try karo."));
     xhr.onload = () => {
-      const body = (xhr.response ?? null) as (UploadResponse & { error?: string }) | null;
-      if (xhr.status >= 200 && xhr.status < 300 && body?.ok) return resolve(body);
-      reject(new Error(body?.error || `Upload fail hua (HTTP ${xhr.status}).`));
+      const body = (xhr.response ?? null) as { sha?: string; message?: string } | null;
+      if (xhr.status >= 200 && xhr.status < 300 && body?.sha) return resolve(body.sha);
+      if (xhr.status === 401) return reject(new Error("GitHub token expire ho gaya — Settings mein naya token save karo."));
+      if (xhr.status === 403) return reject(new Error("GitHub ne access deny kiya — token mein Contents: Read and write permission check karo."));
+      reject(new Error(body?.message || `Upload fail hua (HTTP ${xhr.status}).`));
     };
-    xhr.send(form);
+    xhr.send(JSON.stringify({ content: base64, encoding: "base64" }));
   });
+}
+
+async function finishUpload(
+  folder: string,
+  clean: boolean,
+  files: { name: string; size: number; blobSha: string }[],
+): Promise<UploadResponse> {
+  const res = await fetch("/api/upload-finish", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ folder, clean, files }),
+  });
+  const body = (await res.json().catch(() => null)) as (UploadResponse & { error?: string }) | null;
+  if (!res.ok || !body?.ok) throw new Error(body?.error || `Upload fail hua (HTTP ${res.status}).`);
+  return body;
 }
 
 function nextId() {
@@ -168,39 +197,56 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, su
     if (!uploadable.length || busy) return;
     haptic("light");
     setBusy(true);
-    const batches = makeBatches(uploadable);
-    const doneBytesBefore: number[] = [];
-    let acc = 0;
-    for (const b of batches) {
-      doneBytesBefore.push(acc);
-      acc += b.reduce((n, q) => n + q.file.size, 0);
-    }
     let lastSha = "";
     let failures = 0;
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i]!;
-      const ids = batch.map((q) => q.id);
-      setStatus(ids, { status: "uploading", error: undefined });
-      const batchBytes = batch.reduce((n, q) => n + q.file.size, 0);
+    // 1) Ask the server for the GitHub token + repo (owner only).
+    let prep: PrepareResponse;
+    try {
+      prep = await prepareUpload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload shuru nahi hua.";
+      setStatus(uploadable.map((q) => q.id), { status: "failed", error: msg });
+      setBusy(false);
+      setProgress(1);
+      toast.error(msg);
+      return;
+    }
+    // 2) Push each file's bytes straight to GitHub as a blob (no server body limit).
+    const pushed: { id: string; name: string; size: number; blobSha: string }[] = [];
+    let doneBytes = 0;
+    for (const q of uploadable) {
+      setStatus([q.id], { status: "uploading", error: undefined });
       try {
-        const res = await postBatch(
-          targetFolder,
-          clean,
-          batch.map((q) => q.file),
-          (ratio) => setProgress(totalBytes ? (doneBytesBefore[i]! + ratio * batchBytes) / totalBytes : ratio),
+        const base64 = await readAsBase64(q.file);
+        const blobSha = await createBlob(prep.token, prep.repo, base64, (ratio) =>
+          setProgress(totalBytes ? (doneBytes + ratio * q.file.size) / totalBytes : ratio),
         );
+        pushed.push({ id: q.id, name: cleanFileName(q.file.name, { slug: clean }), size: q.file.size, blobSha });
+      } catch (err) {
+        failures += 1;
+        setStatus([q.id], { status: "failed", error: err instanceof Error ? err.message : "Upload fail hua." });
+      }
+      doneBytes += q.file.size;
+    }
+    // 3) One tiny JSON commit on the server places the blobs in the library.
+    if (pushed.length) {
+      try {
+        const res = await finishUpload(targetFolder, clean, pushed);
         lastSha = res.commitSha;
         setQueue((prev) =>
           prev.map((q) => {
-            if (!ids.includes(q.id)) return q;
-            const expected = cleanFileName(q.file.name, { slug: clean });
-            const hit = res.uploaded.find((u) => u.name === expected) ?? res.uploaded[batch.indexOf(q)];
+            const inPushed = pushed.find((p) => p.id === q.id);
+            if (!inPushed) return q;
+            const hit = res.uploaded.find((u) => u.name === inPushed.name);
             return { ...q, status: "done", result: hit };
           }),
         );
       } catch (err) {
-        failures += batch.length;
-        setStatus(ids, { status: "failed", error: err instanceof Error ? err.message : "Upload fail hua." });
+        failures += pushed.length;
+        setStatus(pushed.map((p) => p.id), {
+          status: "failed",
+          error: err instanceof Error ? err.message : "Upload fail hua.",
+        });
       }
     }
     setBusy(false);
