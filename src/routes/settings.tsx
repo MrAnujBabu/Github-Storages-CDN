@@ -153,6 +153,7 @@ function SettingsPage() {
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[15px] font-medium text-foreground">{repoLabel(repo)}</p>
+              <Link to="/repos" className="text-[12.5px] font-medium text-primary">Saare repos / naya repo banao →</Link>
               <p className="text-[12.5px] text-muted-foreground">
                 Public GitHub repo · jsDelivr CDN se deliver
                 {!session.githubConfigured ? " · GitHub access abhi configure nahi hai (sirf padh sakte hain)" : ""}

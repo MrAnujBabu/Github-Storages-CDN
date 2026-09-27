@@ -38,6 +38,10 @@ export interface Manifest {
    * Server-only: no read model ever returns the full manifest to the client.
    */
   ownerTokenEnc?: string | undefined;
+  /** Home manifest only: every storage repo ("owner/repo@branch") the app manages. */
+  repos?: string[] | undefined;
+  /** Home manifest only: repo that uploads + browsing currently use. */
+  activeRepo?: string | undefined;
   updatedAt?: string | undefined;
 }
 
@@ -128,6 +132,8 @@ export function parseManifest(text: string | null | undefined): Manifest {
     hidden,
     aliases,
     ownerTokenEnc: typeof r["ownerTokenEnc"] === "string" && r["ownerTokenEnc"].length <= 4000 ? r["ownerTokenEnc"] : undefined,
+    repos: Array.isArray(r["repos"]) ? r["repos"].filter((x): x is string => typeof x === "string" && /^[\w.-]+\/[\w.-]+@[\w./-]+$/.test(x)).slice(0, 50) : undefined,
+    activeRepo: typeof r["activeRepo"] === "string" && /^[\w.-]+\/[\w.-]+@[\w./-]+$/.test(r["activeRepo"]) ? r["activeRepo"] : undefined,
     updatedAt: typeof r["updatedAt"] === "string" ? r["updatedAt"] : undefined,
   };
 }

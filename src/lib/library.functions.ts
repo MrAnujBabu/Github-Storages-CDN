@@ -12,6 +12,7 @@ import type {
   PagesInfo,
   SearchHit,
   SessionInfo,
+  StorageRepoSummary,
 } from "./library-types";
 import { type LinkHealth, isPreviewOrigin, normalizeAppUrl } from "./links";
 import type { ManifestSettings } from "./manifest";
@@ -110,7 +111,8 @@ export const getSession = createServerFn({ method: "GET" }).handler(async (): Pr
   const { isOwner, isPasscodeConfigured } = await import("./session.server");
   const { isGitHubConfigured } = await import("./github.server");
   const { decryptToken } = await import("./owner-token.server");
-  const { getRepoConfig, loadSnapshot } = await import("./library.server");
+  const { getRepoConfig, loadSnapshot, resolveActiveRepo } = await import("./library.server");
+  await resolveActiveRepo();
   const signedIn = await isOwner();
   let defaultLinkStyle: SessionInfo["defaultLinkStyle"] = "pages";
   let appUrl: string | undefined;
@@ -329,7 +331,7 @@ export const saveGithubToken = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const lib = await import("./library.server");
     const { verifyTokenWriteAccess } = await import("./owner-token.server");
-    const check = await verifyTokenWriteAccess(data.token, lib.getRepoConfig());
+    const check = await verifyTokenWriteAccess(data.token, (await lib.resolveActiveRepo()));
     if (!check.ok) {
       setResponseStatus(400);
       throw new Error(check.message ?? "Token verify nahi hua.");
@@ -360,7 +362,7 @@ export const purgeCdn = createServerFn({ method: "POST" })
     const lib = await import("./library.server");
     if (data.paths && data.paths.length) {
       const { purgeCdnPaths } = await import("./cdn.server");
-      return purgeCdnPaths(lib.getRepoConfig(), data.paths);
+      return purgeCdnPaths((await lib.resolveActiveRepo()), data.paths);
     }
     return lib.purgeAll();
   });
@@ -408,4 +410,45 @@ export const moveItems = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const lib = await import("./library.server");
     return withStatus(() => lib.moveMany(data.paths, data.toFolder));
+  });
+
+/* ------------------------------ storage repos ------------------------------ */
+
+const repoNameSchema = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._-]+$/, "Repo naam mein sirf English letters, number, - _ . chalenge.");
+
+export const listRepos = createServerFn({ method: "GET" })
+  .middleware([ownerOnly])
+  .handler(async (): Promise<StorageRepoSummary[]> => {
+    const lib = await import("./library.server");
+    return withStatus(() => lib.listStorageRepos());
+  });
+
+export const createRepo = createServerFn({ method: "POST" })
+  .middleware([ownerOnly])
+  .validator((input: unknown) =>
+    z.object({ name: repoNameSchema, description: z.string().max(300).optional(), isPrivate: z.boolean().default(false), makeActive: z.boolean().default(true) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const lib = await import("./library.server");
+    return withStatus(() => lib.createStorageRepo(data));
+  });
+
+export const addRepo = createServerFn({ method: "POST" })
+  .middleware([ownerOnly])
+  .validator((input: unknown) =>
+    z.object({ fullName: z.string().trim().regex(/^[\w.-]+\/[\w.-]+$/, "owner/repo likho"), branch: z.string().trim().max(100).default("main") }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const lib = await import("./library.server");
+    await withStatus(() => lib.addExistingStorageRepo(data.fullName, data.branch));
+    return { ok: true as const };
+  });
+
+export const setActiveRepo = createServerFn({ method: "POST" })
+  .middleware([ownerOnly])
+  .validator((input: unknown) => z.object({ spec: z.string().max(250) }).parse(input))
+  .handler(async ({ data }) => {
+    const lib = await import("./library.server");
+    await withStatus(() => lib.setActiveStorageRepo(data.spec));
+    return { ok: true as const };
   });

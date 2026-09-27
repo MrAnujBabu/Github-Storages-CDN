@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogIn, Search, Settings2 } from "lucide-react";
+import { LogIn, Search, Settings2, Database } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import nbLogo from "@/assets/nb-logo.png";
@@ -80,11 +80,18 @@ export function AppShell({ children, bottomBar, footer, compact, className }: Pr
             {loading ? (
               <span className="h-11 w-11" aria-hidden />
             ) : isOwner ? (
+              <>
+              <Button asChild variant="ghost" size="icon" className="h-11 w-11 rounded-full" aria-label="Storage repos">
+                <Link to="/repos">
+                  <Database className="h-5 w-5" />
+                </Link>
+              </Button>
               <Button asChild variant="ghost" size="icon" className="h-11 w-11 rounded-full" aria-label="Settings">
                 <Link to="/settings">
                   <Settings2 className="h-5 w-5" />
                 </Link>
               </Button>
+              </>
             ) : (
               <Button asChild variant="ghost" className="h-11 rounded-full px-3 text-sm sm:px-4">
                 <Link to="/sign-in">

@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/upload-prepare")({
       POST: async ({ request }) => {
         const { isOwnerRequest } = await import("@/lib/session.server");
         const { resolveGithubToken } = await import("@/lib/owner-token.server");
-        const { getRepoConfig } = await import("@/lib/library.server");
+        const { resolveActiveRepo } = await import("@/lib/library.server");
 
         const json = (body: unknown, status = 200) =>
           new Response(JSON.stringify(body), {
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/api/upload-prepare")({
         if (!token) {
           return json({ error: "GitHub token set nahi hai — Settings mein token save karo." }, 503);
         }
-        return json({ ok: true, token, repo: getRepoConfig() });
+        return json({ ok: true, token, repo: await resolveActiveRepo(true) });
       },
     },
   },

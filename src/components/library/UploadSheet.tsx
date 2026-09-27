@@ -314,6 +314,9 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, su
           <div className="min-w-0 text-[12.5px] leading-snug">
             <span className="block text-muted-foreground">
               {repoLabel(repo)} <span className="opacity-70">@{repo.branch}</span>
+              {!busy ? (
+                <a href="/repos" className="ml-2 font-medium text-primary underline-offset-2 hover:underline">Repo badlo / naya banao</a>
+              ) : null}
             </span>
             <span className="block break-all font-medium text-foreground">
               {targetFolder ? `/${targetFolder}` : "/ (library root)"}

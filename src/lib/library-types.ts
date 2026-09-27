@@ -175,3 +175,30 @@ export interface KindListing {
   bytes: number;
   files: Array<{ file: LibraryFile; folder: string }>;
 }
+
+export interface RepoFolderStat {
+  /** top-level folder name ("" = library root) */
+  name: string;
+  files: number;
+  bytes: number;
+}
+
+export interface StorageRepoSummary {
+  spec: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  active: boolean;
+  home: boolean;
+  ok: boolean;
+  error?: string;
+  private: boolean;
+  /** GitHub-reported repo size incl. history */
+  sizeBytes: number;
+  /** sum of current files */
+  filesBytes: number;
+  fileCount: number;
+  folderCount: number;
+  folders: RepoFolderStat[];
+  htmlUrl: string;
+}

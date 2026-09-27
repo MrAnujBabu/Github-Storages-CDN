@@ -7,6 +7,8 @@ import {
   getBranchHead,
   getFullTree,
   getPagesInfo,
+  getRepoInfo,
+  ghJson,
   requestPagesBuild,
   type PagesInfo,
   type TreeChange,
@@ -26,6 +28,8 @@ import type {
   LibraryStats,
   SearchHit,
   UploadedEntry,
+  StorageRepoSummary,
+  RepoFolderStat,
 } from "./library-types";
 import {
   type ItemLabel,
@@ -63,8 +67,36 @@ import { ALLOWED_FILE_EXTS, DEFAULT_REPO, MANIFEST_PATH, MAX_FILE_BYTES, parseRe
 /* Config + snapshot                                                   */
 /* ------------------------------------------------------------------ */
 
-export function getRepoConfig(): RepoRef {
+/** Home repo: holds the encrypted token + the list of storage repos. */
+export function getHomeRepo(): RepoRef {
   return parseRepoSpec(process.env["STORAGE_REPO"]) ?? DEFAULT_REPO;
+}
+
+export function repoSpec(r: RepoRef): string {
+  return `${r.owner}/${r.repo}@${r.branch}`;
+}
+
+let activeCache: { repo: RepoRef; at: number } | null = null;
+const ACTIVE_TTL_MS = 20_000;
+
+/** Repo that browsing + uploads use right now (sync; last resolved value). */
+export function getRepoConfig(): RepoRef {
+  return activeCache?.repo ?? getHomeRepo();
+}
+
+/** Reads the active repo from the home manifest (cached ~20s). */
+export async function resolveActiveRepo(fresh = false): Promise<RepoRef> {
+  if (!fresh && activeCache && Date.now() - activeCache.at < ACTIVE_TTL_MS) return activeCache.repo;
+  const home = getHomeRepo();
+  let repo = home;
+  try {
+    const snap = await loadSnapshot({ repo: home, fresh });
+    repo = parseRepoSpec(snap.manifest.activeRepo) ?? home;
+  } catch {
+    repo = activeCache?.repo ?? home;
+  }
+  activeCache = { repo, at: Date.now() };
+  return repo;
 }
 
 export class LibraryError extends Error {
@@ -88,7 +120,7 @@ export interface Snapshot {
 }
 
 const SNAPSHOT_TTL_MS = 20_000;
-let cached: { key: string; at: number; promise: Promise<Snapshot> } | null = null;
+const cache = new Map<string, { at: number; promise: Promise<Snapshot> }>();
 
 async function fetchSnapshot(repo: RepoRef): Promise<Snapshot> {
   const head = await getBranchHead(repo);
@@ -107,23 +139,22 @@ async function fetchSnapshot(repo: RepoRef): Promise<Snapshot> {
   };
 }
 
-export async function loadSnapshot(opts: { fresh?: boolean } = {}): Promise<Snapshot> {
-  const repo = getRepoConfig();
-  const key = `${repo.owner}/${repo.repo}@${repo.branch}`;
+export async function loadSnapshot(opts: { fresh?: boolean; repo?: RepoRef } = {}): Promise<Snapshot> {
+  const repo = opts.repo ?? (await resolveActiveRepo());
+  const key = repoSpec(repo);
   const now = Date.now();
-  if (!opts.fresh && cached && cached.key === key && now - cached.at < SNAPSHOT_TTL_MS) {
-    return cached.promise;
-  }
+  const hit = cache.get(key);
+  if (!opts.fresh && hit && now - hit.at < SNAPSHOT_TTL_MS) return hit.promise;
   const promise = fetchSnapshot(repo).catch((err) => {
-    if (cached?.promise === promise) cached = null;
+    if (cache.get(key)?.promise === promise) cache.delete(key);
     throw err;
   });
-  cached = { key, at: now, promise };
+  cache.set(key, { at: now, promise });
   return promise;
 }
 
 export function invalidateSnapshot(): void {
-  cached = null;
+  cache.clear();
 }
 
 /* ------------------------------------------------------------------ */
@@ -747,7 +778,7 @@ export async function saveSettings(settings: Partial<ManifestSettings>): Promise
 export async function saveOwnerToken(token: string): Promise<void> {
   const { encryptToken, setRuntimeToken, withTokenOverride } = await import("./owner-token.server");
   setRuntimeToken(token);
-  const snapshot = await loadSnapshot({ fresh: true });
+  const snapshot = await loadSnapshot({ fresh: true, repo: getHomeRepo() });
   const manifest: Manifest = { ...snapshot.manifest, ownerTokenEnc: encryptToken(token) };
   await withTokenOverride(token, () => commit(snapshot, [manifestChange(manifest)], "Update GitHub access"));
 }
@@ -757,7 +788,7 @@ export async function clearOwnerToken(): Promise<void> {
   const { forgetRuntimeToken, resolveGithubToken, withTokenOverride } = await import("./owner-token.server");
   const current = await resolveGithubToken();
   forgetRuntimeToken();
-  const snapshot = await loadSnapshot({ fresh: true });
+  const snapshot = await loadSnapshot({ fresh: true, repo: getHomeRepo() });
   const manifest: Manifest = { ...snapshot.manifest, ownerTokenEnc: undefined };
   const change = manifestChange(manifest);
   if (current) await withTokenOverride(current, () => commit(snapshot, [change], "Remove saved GitHub access"));
@@ -877,7 +908,7 @@ const NOJEKYLL_PATH = ".nojekyll";
 
 /** Current Pages state for the storage repo (owner settings screen). */
 export async function pagesStatus(): Promise<PagesInfo> {
-  return getPagesInfo(getRepoConfig());
+  return getPagesInfo(await resolveActiveRepo());
 }
 
 /**
@@ -1013,4 +1044,134 @@ export function kindListing(snapshot: Snapshot, kind: FileKind, includeHidden: b
   }
   files.sort((a, b) => naturalCompare(a.folder, b.folder) || naturalCompare(a.file.name, b.file.name));
   return { repo: snapshot.repo, headSha: snapshot.headSha, settings: m.settings, kind, bytes, files };
+}
+
+/* ------------------------------ storage repos ------------------------------ */
+
+/** GitHub recommends < 1 GB per repo; we warn early and suggest a new one at 900 MB. */
+export const REPO_SOFT_LIMIT_BYTES = 1024 * 1024 * 1024;
+
+function registry(home: Snapshot): string[] {
+  const list = new Set<string>([repoSpec(getHomeRepo()), ...(home.manifest.repos ?? [])]);
+  if (home.manifest.activeRepo) list.add(home.manifest.activeRepo);
+  return [...list];
+}
+
+async function summarize(spec: string, activeSpec: string): Promise<StorageRepoSummary> {
+  const ref = parseRepoSpec(spec)!;
+  const base: StorageRepoSummary = {
+    spec, owner: ref.owner, repo: ref.repo, branch: ref.branch,
+    active: spec === activeSpec, home: spec === repoSpec(getHomeRepo()),
+    ok: false, private: false, sizeBytes: 0, filesBytes: 0, fileCount: 0, folderCount: 0,
+    folders: [], htmlUrl: `https://github.com/${ref.owner}/${ref.repo}`,
+  };
+  try {
+    const [info, snap] = await Promise.all([getRepoInfo(ref), loadSnapshot({ repo: ref })]);
+    const folders = new Map<string, RepoFolderStat>();
+    const allFolders = new Set<string>();
+    let fileCount = 0, filesBytes = 0;
+    for (const e of snap.files) {
+      const parts = e.path.split("/");
+      for (let i = 1; i < parts.length; i++) allFolders.add(parts.slice(0, i).join("/"));
+      if (parts[0]!.startsWith(".")) continue;
+      const name = baseName(e.path);
+      if (name === ".keep" || name === ".nojekyll") continue;
+      fileCount++; filesBytes += e.size ?? 0;
+      const top = parts.length > 1 ? parts[0]! : "";
+      const f = folders.get(top) ?? { name: top, files: 0, bytes: 0 };
+      f.files++; f.bytes += e.size ?? 0;
+      folders.set(top, f);
+    }
+    const folderCount = [...allFolders].filter((f) => !f.split("/").some((p) => p.startsWith("."))).length;
+    return {
+      ...base, ok: true, private: info.private, sizeBytes: info.size * 1024, filesBytes, fileCount, folderCount,
+      folders: [...folders.values()].sort((a, b) => b.bytes - a.bytes), htmlUrl: info.html_url,
+    };
+  } catch (err) {
+    return { ...base, error: err instanceof Error ? err.message : "Repo padh nahi paaye." };
+  }
+}
+
+export async function listStorageRepos(): Promise<StorageRepoSummary[]> {
+  const home = await loadSnapshot({ repo: getHomeRepo(), fresh: true });
+  const active = repoSpec(await resolveActiveRepo(true));
+  return Promise.all(registry(home).map((s) => summarize(s, active)));
+}
+
+async function saveRegistry(mut: (m: Manifest) => Manifest, message: string): Promise<void> {
+  const home = await loadSnapshot({ repo: getHomeRepo(), fresh: true });
+  await commit(home, [manifestChange(mut(home.manifest))], message);
+  activeCache = null;
+}
+
+export async function setActiveStorageRepo(spec: string): Promise<void> {
+  const ref = parseRepoSpec(spec);
+  if (!ref) throw new LibraryError("Repo ka naam theek nahi hai.");
+  const home = await loadSnapshot({ repo: getHomeRepo(), fresh: true });
+  if (!registry(home).includes(repoSpec(ref))) throw new LibraryError("Ye repo list mein nahi hai.", 404);
+  await saveRegistry((m) => ({ ...m, activeRepo: repoSpec(ref) }), `Switch active storage repo to ${repoSpec(ref)}`);
+}
+
+/** Adds an existing GitHub repo (must already exist and be writable) to the list. */
+export async function addExistingStorageRepo(fullName: string, branch: string): Promise<void> {
+  const ref = parseRepoSpec(`${fullName}@${branch || "main"}`);
+  if (!ref) throw new LibraryError("Repo ka naam owner/repo jaisa likho.");
+  try {
+    const info = await getRepoInfo(ref);
+    if (info.permissions && info.permissions.push === false) throw new LibraryError("Is repo mein likhne ki permission nahi hai.", 403);
+  } catch (err) {
+    if (err instanceof GitHubError) throw new LibraryError(err.status === 404 ? "Repo GitHub par nahi mila." : err.message, err.status);
+    throw err;
+  }
+  await saveRegistry((m) => ({ ...m, repos: [...new Set([...(m.repos ?? []), repoSpec(ref)])] }), `Add storage repo ${repoSpec(ref)}`);
+}
+
+export async function createStorageRepo(input: {
+  name: string; description?: string | undefined; isPrivate: boolean; makeActive: boolean;
+}): Promise<{ spec: string; pagesEnabled: boolean }> {
+  let created: { full_name: string; default_branch: string; owner: { login: string }; name: string };
+  try {
+    created = await ghJson("user/repos", {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name, description: input.description || "Naveen Bharat Files storage", private: input.isPrivate,
+        auto_init: true, has_issues: false, has_wiki: false, has_projects: false,
+      }),
+    });
+  } catch (err) {
+    if (err instanceof GitHubError) {
+      if (err.status === 422 && /already exists/i.test(err.body || err.message))
+        throw new LibraryError("Is naam ka repo pehle se hai — koi aur naam likho.", 409);
+      if (err.status === 403 || err.status === 404)
+        throw new LibraryError("Token ko repo banane ki permission nahi hai — token mein 'repo' (ya Administration: write) permission do.", 403);
+      throw new LibraryError(err.message, err.status >= 500 ? 502 : err.status);
+    }
+    throw err;
+  }
+  const ref: RepoRef = { owner: created.owner.login, repo: created.name, branch: created.default_branch || "main" };
+  // GitHub needs a moment before the new repo's branch is readable.
+  for (let i = 0; i < 6; i++) {
+    try { await getBranchHead(ref); break; } catch { await new Promise((r) => setTimeout(r, 1000)); }
+  }
+  const spec = repoSpec(ref);
+  let pagesEnabled = false;
+  try {
+    const snap = await loadSnapshot({ repo: ref, fresh: true });
+    await commit(snap, [
+      { path: NOJEKYLL_PATH, content: "" },
+      { path: MANIFEST_PATH, content: Buffer.from(serializeManifest(parseManifest(null)), "utf8").toString("base64") },
+    ], "Set up storage repo");
+    if (!input.isPrivate) {
+      await createPagesSite(ref);
+      await requestPagesBuild(ref);
+      pagesEnabled = true;
+    }
+  } catch (err) {
+    console.warn("[repos] setup step failed", err instanceof Error ? err.message : err);
+  }
+  await saveRegistry(
+    (m) => ({ ...m, repos: [...new Set([...(m.repos ?? []), spec])], activeRepo: input.makeActive ? spec : m.activeRepo }),
+    `Add storage repo ${spec}`,
+  );
+  return { spec, pagesEnabled };
 }
