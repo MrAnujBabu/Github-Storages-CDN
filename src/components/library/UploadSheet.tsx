@@ -1,4 +1,4 @@
-import { AlertCircle, Check, CloudUpload, FolderPlus, Link2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, Check, CloudUpload, FolderPlus, Link2, RotateCcw, ShieldAlert, X } from "lucide-react";
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -322,6 +322,14 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, su
               {targetFolder ? `/${targetFolder}` : "/ (library root)"}
             </span>
           </div>
+        </div>
+
+        {/* Safety note — files public repo me jaati hain; sirf legal content */}
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-[12px] leading-snug text-amber-800 dark:text-amber-200">
+            <span className="font-medium">Yaad rakhein:</span> file public repo me jaayegi — jis ko CDN link mila, wo file khol sakta hai, isliye private/personal documents upload na karein. Sirf apni ya legal PDFs dalen — copyrighted material (dusron ki books/material bina permission) par GitHub DMCA action le sakta hai.
+          </p>
         </div>
 
         <input ref={inputRef} type="file" multiple className="sr-only" onChange={onPick} aria-label="Files chuno" />
