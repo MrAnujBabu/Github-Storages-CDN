@@ -13,7 +13,7 @@ import type { UploadResponse, UploadedEntry } from "@/lib/library-types";
 import { buildLink, type LinkStyle } from "@/lib/links";
 import { haptic } from "@/lib/haptics";
 import { cleanFileName, cleanFolderName, fileKind, formatBytes, joinPath } from "@/lib/paths";
-import { MAX_FILES_PER_UPLOAD, MAX_FILE_BYTES, type RepoRef } from "@/lib/storage-config";
+import { MAX_FILES_PER_UPLOAD, MAX_FILE_BYTES, repoLabel, type RepoRef } from "@/lib/storage-config";
 import { cn } from "@/lib/utils";
 
 import { KindIcon } from "./KindIcon";
@@ -35,6 +35,8 @@ interface Props {
   folder: string;
   repo: RepoRef;
   defaultStyle: LinkStyle;
+  /** Immediate subfolders of `folder` — shown as quick picks. */
+  subfolders?: string[];
   onUploaded: (commitSha: string) => void | Promise<void>;
 }
 
@@ -93,9 +95,10 @@ function nextId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, onUploaded }: Props) {
+export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, subfolders = [], onUploaded }: Props) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [subfolder, setSubfolder] = useState("");
+  const [picked, setPicked] = useState(""); // "" = yahin, "__new__" = naya folder
   const [clean, setClean] = useState(true);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -104,12 +107,17 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, on
   const { copy, copied } = useCopy("Sabhi links copy ho gaye");
   const origin = useLinkOrigin();
 
-  const targetFolder = useMemo(() => joinPath(folder, cleanFolderName(subfolder, { slug: clean })), [folder, subfolder, clean]);
+  const effectiveSub = picked === "__new__" ? subfolder : picked;
+  const targetFolder = useMemo(
+    () => joinPath(folder, cleanFolderName(effectiveSub, { slug: clean })),
+    [folder, effectiveSub, clean],
+  );
 
   useEffect(() => {
     if (!open) {
       setQueue([]);
       setSubfolder("");
+      setPicked("");
       setBusy(false);
       setProgress(0);
     }
@@ -248,12 +256,25 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, on
       open={open}
       onOpenChange={onOpenChange}
       title="Files upload karo"
-      description={targetFolder ? `Folder: ${targetFolder}` : "Folder: Library (root)"}
+      description={`Repo: ${repoLabel(repo)}@${repo.branch}`}
       footer={footer}
       locked={busy}
       className="sm:max-w-xl"
     >
       <div className="space-y-4 pb-2">
+        {/* Kahan ja raha hai — repo + folder ka poora path */}
+        <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/50 px-3 py-2.5">
+          <FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 text-[12.5px] leading-snug">
+            <span className="block text-muted-foreground">
+              {repoLabel(repo)} <span className="opacity-70">@{repo.branch}</span>
+            </span>
+            <span className="block break-all font-medium text-foreground">
+              {targetFolder ? `/${targetFolder}` : "/ (library root)"}
+            </span>
+          </div>
+        </div>
+
         <input ref={inputRef} type="file" multiple className="sr-only" onChange={onPick} aria-label="Files chuno" />
         <button
           type="button"
@@ -281,25 +302,48 @@ export function UploadSheet({ open, onOpenChange, folder, repo, defaultStyle, on
         </button>
 
         {!allFinished ? (
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="upload-subfolder" className="text-[13px]">
-                Naya subfolder (optional)
+              <Label htmlFor="upload-folder-pick" className="text-[13px]">
+                Kis folder me daalna hai?
               </Label>
-              <div className="relative">
-                <FolderPlus className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="upload-subfolder"
-                  value={subfolder}
-                  onChange={(e) => setSubfolder(e.target.value)}
-                  placeholder="jaise: Chapter 3"
-                  className="h-11 rounded-lg pl-9 text-base"
-                  disabled={busy}
-                  enterKeyHint="done"
-                />
-              </div>
+              <select
+                id="upload-folder-pick"
+                value={picked}
+                onChange={(e) => setPicked(e.target.value)}
+                disabled={busy}
+                className="h-11 w-full rounded-lg border border-input bg-card px-3 text-base text-foreground"
+              >
+                <option value="">Yahin — {folder ? `/${folder}` : "Library (root)"}</option>
+                {subfolders.map((name) => (
+                  <option key={name} value={name}>
+                    {name}/
+                  </option>
+                ))}
+                <option value="__new__">+ Naya folder banao…</option>
+              </select>
             </div>
-            <label className="flex h-11 items-center justify-between gap-3 rounded-lg border border-input bg-card px-3 text-[13px] sm:w-56">
+            {picked === "__new__" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="upload-subfolder" className="text-[13px]">
+                  Naye folder ka naam
+                </Label>
+                <div className="relative">
+                  <FolderPlus className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="upload-subfolder"
+                    value={subfolder}
+                    onChange={(e) => setSubfolder(e.target.value)}
+                    placeholder="jaise: Chapter 3"
+                    className="h-11 rounded-lg pl-9 text-base"
+                    disabled={busy}
+                    enterKeyHint="done"
+                  />
+                </div>
+                <p className="text-[11.5px] text-muted-foreground">Folder upload ke saath hi ban jayega.</p>
+              </div>
+            ) : null}
+            <label className="flex h-11 items-center justify-between gap-3 rounded-lg border border-input bg-card px-3 text-[13px]">
               <span className="text-foreground">
                 Naam saaf karo
                 <span className="block text-[11px] text-muted-foreground">spaces → hyphen, chhote link</span>

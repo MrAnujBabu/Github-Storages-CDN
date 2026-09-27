@@ -126,6 +126,14 @@ export default function PdfViewer({ url, title, fallbackHref, className, initial
     return () => window.clearTimeout(timer);
   }, [numPages, initialPage]);
 
+  // Safety net: some phone browsers / embedded previews stall the pdf.js worker
+  // silently (skeleton forever). After 20 s, show the "open directly" fallback.
+  useEffect(() => {
+    if (numPages > 0 || error) return;
+    const t = window.setTimeout(() => setError("Load hone mein bahut der lag rahi hai. Neeche button se seedha kholo."), 20000);
+    return () => window.clearTimeout(t);
+  }, [numPages, error, url]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;

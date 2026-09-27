@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/library/AppShell";
@@ -38,6 +38,10 @@ function SignInPage() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [onVercel, setOnVercel] = useState(false);
+  useEffect(() => {
+    setOnVercel(window.location.hostname.endsWith("vercel.app"));
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -91,7 +95,12 @@ function SignInPage() {
             </div>
           ) : !loading && session && !session.passcodeConfigured ? (
             <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-foreground">
-              Owner passcode abhi set nahi hua hai. Lovable project settings mein <span className="font-mono">OWNER_PASSCODE</span> naam ka secret add karo — uske baad yahan sign in hoga.
+              Owner passcode is site par abhi set nahi hua hai. Jahan ye site chal rahi hai, wahan ke environment
+              variables mein <span className="font-mono">OWNER_PASSCODE</span> aur <span className="font-mono">SESSION_SECRET</span> add karo
+              {onVercel
+                ? " — Vercel dashboard → Project → Settings → Environment Variables mein, phir Redeploy karo"
+                : " — Lovable project settings → Secrets mein"}
+              . Uske baad yahan sign in hoga.
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-4">

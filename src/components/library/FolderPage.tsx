@@ -255,6 +255,10 @@ export function FolderPage({ path }: { path: string }) {
                     Arrange
                   </Button>
                 </div>
+              ) : session?.passcodeConfigured ? (
+                <Button variant="ghost" className="pressable h-10 rounded-lg text-muted-foreground" asChild>
+                  <Link to="/sign-in">Upload ke liye Sign in karo</Link>
+                </Button>
               ) : null}
               {canSelect ? (
                 <Button
@@ -370,6 +374,7 @@ export function FolderPage({ path }: { path: string }) {
         folder={path}
         repo={repo}
         defaultStyle={defaultStyle}
+        subfolders={view.items.filter((i) => i.type === "folder").map((i) => i.name)}
         onUploaded={async () => {
           await actions.refreshAfterUpload();
         }}
