@@ -683,6 +683,38 @@ export async function saveSettings(settings: Partial<ManifestSettings>): Promise
   return next;
 }
 
+/* ------------------------ owner GitHub token (encrypted) ------------------------ */
+
+/**
+ * Saves the owner's GitHub token encrypted in the manifest. The runtime token
+ * is set BEFORE the commit so the very first save (no env token yet) can push
+ * with the new token itself via the save-flow override.
+ */
+export async function saveOwnerToken(token: string): Promise<void> {
+  const { encryptToken, setRuntimeToken, withTokenOverride } = await import("./owner-token.server");
+  setRuntimeToken(token);
+  const snapshot = await loadSnapshot({ fresh: true });
+  const manifest: Manifest = { ...snapshot.manifest, ownerTokenEnc: encryptToken(token) };
+  await withTokenOverride(token, () => commit(snapshot, [manifestChange(manifest)], "Update GitHub access"));
+}
+
+/** Removes the saved token. Uses the still-valid saved token to push the removal. */
+export async function clearOwnerToken(): Promise<void> {
+  const { forgetRuntimeToken, resolveGithubToken, withTokenOverride } = await import("./owner-token.server");
+  const current = await resolveGithubToken();
+  forgetRuntimeToken();
+  const snapshot = await loadSnapshot({ fresh: true });
+  const manifest: Manifest = { ...snapshot.manifest, ownerTokenEnc: undefined };
+  const change = manifestChange(manifest);
+  if (current) await withTokenOverride(current, () => commit(snapshot, [change], "Remove saved GitHub access"));
+  else await commit(snapshot, [change], "Remove saved GitHub access");
+}
+
+export async function ownerTokenStatus(): Promise<{ source: "env" | "saved" | "none"; hasSessionSecret: boolean }> {
+  const { tokenStatus } = await import("./owner-token.server");
+  return tokenStatus();
+}
+
 export async function purgeAll(): Promise<{ purged: number; failed: number }> {
   const snapshot = await loadSnapshot();
   return purgeCdnPaths(

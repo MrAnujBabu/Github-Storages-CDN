@@ -32,6 +32,12 @@ export interface Manifest {
   hidden: string[];
   /** old path -> new path, kept when items are renamed or moved */
   aliases: Record<string, string>;
+  /**
+   * Owner GitHub token, AES-256-GCM encrypted with a SESSION_SECRET-derived
+   * key (never plaintext — the manifest is committed to a public repo).
+   * Server-only: no read model ever returns the full manifest to the client.
+   */
+  ownerTokenEnc?: string | undefined;
   updatedAt?: string | undefined;
 }
 
@@ -121,6 +127,7 @@ export function parseManifest(text: string | null | undefined): Manifest {
     labels,
     hidden,
     aliases,
+    ownerTokenEnc: typeof r["ownerTokenEnc"] === "string" && r["ownerTokenEnc"].length <= 4000 ? r["ownerTokenEnc"] : undefined,
     updatedAt: typeof r["updatedAt"] === "string" ? r["updatedAt"] : undefined,
   };
 }

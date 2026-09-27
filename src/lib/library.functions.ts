@@ -109,14 +109,20 @@ export const getStats = createServerFn({ method: "GET" }).handler(async (): Prom
 export const getSession = createServerFn({ method: "GET" }).handler(async (): Promise<SessionInfo> => {
   const { isOwner, isPasscodeConfigured } = await import("./session.server");
   const { isGitHubConfigured } = await import("./github.server");
+  const { decryptToken } = await import("./owner-token.server");
   const { getRepoConfig, loadSnapshot } = await import("./library.server");
   const signedIn = await isOwner();
   let defaultLinkStyle: SessionInfo["defaultLinkStyle"] = "pages";
   let appUrl: string | undefined;
+  // A token saved by the owner in Settings counts too, even without env vars.
+  let githubConfigured = isGitHubConfigured();
   try {
     const snapshot = await loadSnapshot();
     defaultLinkStyle = snapshot.manifest.settings.linkStyle;
     appUrl = snapshot.manifest.settings.appUrl;
+    if (!githubConfigured && snapshot.manifest.ownerTokenEnc) {
+      githubConfigured = decryptToken(snapshot.manifest.ownerTokenEnc) !== null;
+    }
   } catch {
     // repo unreachable — the folder view reports the real error
   }
@@ -124,7 +130,7 @@ export const getSession = createServerFn({ method: "GET" }).handler(async (): Pr
     signedIn,
     repo: getRepoConfig(),
     passcodeConfigured: isPasscodeConfigured(),
-    githubConfigured: isGitHubConfigured(),
+    githubConfigured,
     defaultLinkStyle,
     appUrl,
   };
@@ -306,6 +312,45 @@ export const updateSettings = createServerFn({ method: "POST" })
       }
     }
     return withStatus(() => lib.saveSettings(patch));
+  });
+
+/* --------------------------- owner GitHub token --------------------------- */
+
+const githubTokenSchema = z
+  .string()
+  .trim()
+  .min(20)
+  .max(255)
+  .regex(/^gh[pousr]_[A-Za-z0-9_]+$|^github_pat_[A-Za-z0-9_]{20,}$/, "Ye GitHub token jaisa nahi lag raha — ghp_… ya github_pat_… se shuru hona chahiye.");
+
+export const saveGithubToken = createServerFn({ method: "POST" })
+  .middleware([ownerOnly])
+  .validator((input: unknown) => z.object({ token: githubTokenSchema }).parse(input))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const lib = await import("./library.server");
+    const { verifyTokenWriteAccess } = await import("./owner-token.server");
+    const check = await verifyTokenWriteAccess(data.token, lib.getRepoConfig());
+    if (!check.ok) {
+      setResponseStatus(400);
+      throw new Error(check.message ?? "Token verify nahi hua.");
+    }
+    await withStatus(() => lib.saveOwnerToken(data.token));
+    return { ok: true as const };
+  });
+
+export const clearGithubToken = createServerFn({ method: "POST" })
+  .middleware([ownerOnly])
+  .handler(async (): Promise<{ ok: true }> => {
+    const lib = await import("./library.server");
+    await withStatus(() => lib.clearOwnerToken());
+    return { ok: true as const };
+  });
+
+export const getGithubTokenStatus = createServerFn({ method: "GET" })
+  .middleware([ownerOnly])
+  .handler(async (): Promise<{ source: "env" | "saved" | "none"; hasSessionSecret: boolean }> => {
+    const lib = await import("./library.server");
+    return lib.ownerTokenStatus();
   });
 
 export const purgeCdn = createServerFn({ method: "POST" })

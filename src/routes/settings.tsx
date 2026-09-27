@@ -1,7 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Check, ExternalLink, Github, Globe, Link2, LogOut, RefreshCw, Zap } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { AlertTriangle, Check, ExternalLink, Eye, EyeOff, Github, Globe, KeyRound, Link2, LogOut, RefreshCw, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell, PageTitle } from "@/components/library/AppShell";
 import { DeliveryHealthCard } from "@/components/library/DeliveryHealthCard";
@@ -22,6 +24,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLibraryActions } from "@/hooks/useLibraryActions";
 import { useOrigin } from "@/hooks/useOrigin";
 import { useOwner } from "@/hooks/useOwner";
+import {
+  clearGithubToken,
+  getGithubTokenStatus,
+  saveGithubToken,
+} from "@/lib/library.functions";
 import { LINK_STYLES, buildLink, isPreviewOrigin, normalizeAppUrl, pagesBaseUrl, type LinkStyle } from "@/lib/links";
 import { haptic } from "@/lib/haptics";
 import { type FileKind, formatBytes, kindLabel } from "@/lib/paths";
@@ -134,6 +141,8 @@ function SettingsPage() {
       </section>
 
       <AppAddressSection saved={session.appUrl} busy={actions.busy} onSave={(url) => actions.setAppUrl(url)} />
+
+      <GithubTokenSection />
 
       <section className="mt-8">
         <h2 className="px-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Storage</h2>
@@ -364,6 +373,143 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{value}</dd>
     </div>
+  );
+}
+
+/**
+ * Owner GitHub token: save/rotate it from inside the app. Stored AES-256-GCM
+ * encrypted in the repo manifest, so a new token works immediately — no Vercel
+ * env edit or redeploy needed.
+ */
+function GithubTokenSection() {
+  const fetchStatus = useServerFn(getGithubTokenStatus);
+  const doSave = useServerFn(saveGithubToken);
+  const doClear = useServerFn(clearGithubToken);
+  const qc = useQueryClient();
+  const [token, setToken] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState<null | "save" | "clear">(null);
+  const status = useQuery({ queryKey: ["github-token-status"], queryFn: fetchStatus });
+  const src = status.data?.source ?? "none";
+
+  const save = async () => {
+    if (!token.trim() || busy) return;
+    haptic("light");
+    setBusy("save");
+    try {
+      await doSave({ data: { token: token.trim() } });
+      setToken("");
+      await qc.invalidateQueries({ queryKey: ["github-token-status"] });
+      await qc.invalidateQueries({ queryKey: ["session"] });
+      haptic("medium");
+      toast.success("GitHub token save ho gaya — ab upload turant chalega.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Token save nahi hua.");
+      haptic("heavy");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const clear = async () => {
+    if (busy) return;
+    haptic("light");
+    setBusy("clear");
+    try {
+      await doClear();
+      await qc.invalidateQueries({ queryKey: ["github-token-status"] });
+      await qc.invalidateQueries({ queryKey: ["session"] });
+      toast.success("Saved token hata diya.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Token hata nahi paye.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const statusText =
+    src === "env"
+      ? "Environment variable (GITHUB_TOKEN) se chal raha hai. Yahan naya token save karne ka asar tabhi hoga jab env wala hatao."
+      : src === "saved"
+        ? "App mein saved hai — yahin se kabhi bhi naya token daal sakte ho, Vercel chhoone ki zaroorat nahi."
+        : "Set nahi hai — abhi library sirf padhi ja sakti hai. Neeche token save karo, upload turant chalu ho jayega.";
+
+  return (
+    <section className="mt-8">
+      <h2 className="px-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">GitHub token</h2>
+      <p className="mt-1 px-1 text-[13px] text-muted-foreground">
+        Upload, rename aur Pages chalane ke liye chahiye. Yahan save karo — token lock karke library mein hi rakha jata hai.
+      </p>
+      <div className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <KeyRound className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-medium text-foreground">Token ki sthiti</p>
+            <p className={cn("mt-0.5 text-[12.5px]", src === "none" ? "text-destructive" : "text-muted-foreground")} role={src === "none" ? "alert" : undefined}>
+              {status.isPending ? "Dekh rahe hain…" : statusText}
+            </p>
+          </div>
+        </div>
+
+        <form
+          className="mt-4 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <div className="relative">
+            <Input
+              type={show ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="github_pat_… ya ghp_…"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              aria-label="Naya GitHub token"
+              className="h-11 rounded-lg pr-12 font-mono text-[13px]"
+            />
+            <button
+              type="button"
+              onClick={() => setShow((v) => !v)}
+              className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+              aria-label={show ? "Token chhupao" : "Token dikhao"}
+            >
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" className="pressable h-11 flex-1 rounded-lg sm:flex-none sm:px-6" disabled={busy !== null || !token.trim()}>
+              {busy === "save" ? "Save ho raha hai…" : "Token save karo"}
+            </Button>
+            {src === "saved" ? (
+              <Button type="button" variant="outline" className="pressable h-11 rounded-lg" disabled={busy !== null} onClick={() => void clear()}>
+                {busy === "clear" ? "Hata rahe hain…" : "Hatao"}
+              </Button>
+            ) : null}
+          </div>
+        </form>
+
+        <details className="mt-4 rounded-xl bg-muted/50 p-3 text-[13px]">
+          <summary className="cursor-pointer select-none font-medium text-foreground">Naya token kaise banayein? (2 minute)</summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+            <li>
+              GitHub par{" "}
+              <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">
+                Fine-grained token page
+              </a>{" "}
+              kholo (login zaroori).
+            </li>
+            <li>Token name: kuch bhi, jaise <code className="font-mono">library-upload</code>. Resource owner: apna account.</li>
+            <li>Repository access: <b>Only select repositories</b> → <code className="font-mono">edu-pdfs</code>.</li>
+            <li>Permissions → Repository → <b>Contents: Read and write</b>.</li>
+            <li>Generate token → jo <code className="font-mono">github_pat_…</code> dikhe use upar paste karke Save karo.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
   );
 }
 

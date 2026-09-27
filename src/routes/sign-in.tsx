@@ -138,6 +138,7 @@ function SignInPage() {
             </form>
           )}
         </div>
+        <SetupHelper />
         <p className="mt-4 text-center text-[13px] text-muted-foreground">
           <Link to="/about" className="underline-offset-4 hover:underline">
             Ye system kaise kaam karta hai?
@@ -145,5 +146,74 @@ function SignInPage() {
         </p>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * Mobile setup helper: makes a cryptographically random 64-character string
+ * on-device (copy-ready for Vercel's SESSION_SECRET) and links the GitHub
+ * token page — no computer or terminal needed.
+ */
+function SetupHelper() {
+  const [value, setValue] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const generate = () => {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    setValue(Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(""));
+    setCopied(false);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <details className="mt-3 rounded-2xl border border-border bg-card p-4 text-sm shadow-card">
+      <summary className="cursor-pointer select-none font-medium text-foreground">Setup helper (mobile par hi)</summary>
+      <div className="mt-3 space-y-4 text-[13px] text-muted-foreground">
+        <div>
+          <p className="font-medium text-foreground">1. SESSION_SECRET — naya random string</p>
+          <div className="mt-2 flex gap-2">
+            <Button type="button" variant="outline" className="pressable h-10 flex-1 rounded-lg" onClick={generate}>
+              {value ? "Phir se banao" : "String banao"}
+            </Button>
+            {value ? (
+              <Button type="button" variant="outline" className="pressable h-10 rounded-lg" onClick={() => void copy()}>
+                {copied ? "Copy ho gaya" : "Copy"}
+              </Button>
+            ) : null}
+          </div>
+          {value ? (
+            <code className="mt-2 block max-h-24 overflow-auto rounded-lg bg-muted px-3 py-2 font-mono text-[12px] break-all text-foreground/85" data-testid="generated-secret">
+              {value}
+            </code>
+          ) : null}
+          <p className="mt-1.5">Ye value Vercel ke environment variables mein SESSION_SECRET ke naam se paste karo.</p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">2. GitHub token</p>
+          <p className="mt-1">
+            Mobile browser mein{" "}
+            <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">
+              GitHub ka token page
+            </a>{" "}
+            kholo — Repository access mein <b>edu-pdfs</b> chuno aur <b>Contents: Read and write</b> do. Mila token Vercel mein GITHUB_TOKEN ke naam se dalo — ya baad mein app ke Settings se bhi save ho sakta hai.
+          </p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">3. Vercel</p>
+          <p className="mt-1">
+            Project → Settings → Environment Variables mein OWNER_PASSCODE, SESSION_SECRET (upar wali string) aur GITHUB_TOKEN dalo, phir latest deploy ko <b>Redeploy</b> karo. Uske baad yahan passcode ka box dikhne lagega.
+          </p>
+        </div>
+      </div>
+    </details>
   );
 }

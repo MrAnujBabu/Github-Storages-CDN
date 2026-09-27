@@ -1,3 +1,4 @@
+import { currentOverride, resolveGithubToken } from "./owner-token.server";
 import type { RepoRef } from "./storage-config";
 
 /**
@@ -24,7 +25,11 @@ type Transport =
   | { kind: "gateway"; base: string; headers: Record<string, string> }
   | { kind: "direct"; base: string; headers: Record<string, string> };
 
-function transport(): Transport {
+/**
+ * Credential order: Lovable connector gateway → env GITHUB_TOKEN → the
+ * owner-saved token (encrypted in the manifest, rotatable from Settings).
+ */
+async function transport(): Promise<Transport> {
   const gatewayKey = process.env["GITHUB_API_KEY"];
   const lovableKey = process.env["LOVABLE_API_KEY"];
   const common = {
@@ -43,7 +48,8 @@ function transport(): Transport {
       },
     };
   }
-  const token = process.env["GITHUB_TOKEN"];
+  // A save-in-progress override wins so the very first token save can commit.
+  const token = currentOverride() ?? (await resolveGithubToken());
   return {
     kind: "direct",
     base: "https://api.github.com",
@@ -55,6 +61,11 @@ export function isGitHubConfigured(): boolean {
   return Boolean(
     (process.env["GITHUB_API_KEY"] && process.env["LOVABLE_API_KEY"]) || process.env["GITHUB_TOKEN"],
   );
+}
+
+/** Async variant that also counts the owner-saved token (no env vars needed). */
+export async function isGitHubConfiguredAsync(): Promise<boolean> {
+  return (await resolveGithubToken()) !== undefined;
 }
 
 function friendlyMessage(status: number, body: string): string {
@@ -92,13 +103,13 @@ function send(t: Transport, path: string, init: RequestInit): Promise<Response> 
 }
 
 export async function ghFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const t = transport();
+  const t = await transport();
   const res = await send(t, path, init);
   // Public reads must never break: if the connector credential is stale, read the public repo directly.
   const method = (init.method ?? "GET").toUpperCase();
   if (t.kind === "gateway" && res.status === 401 && method === "GET") {
     console.warn(`[github] gateway 401 on ${path}; falling back to direct read`);
-    const token = process.env["GITHUB_TOKEN"];
+    const token = await resolveGithubToken();
     const { Authorization: _a, "X-Connection-Api-Key": _k, ...common } = t.headers;
     return send(
       { kind: "direct", base: "https://api.github.com", headers: token ? { ...common, Authorization: `Bearer ${token}` } : common },
