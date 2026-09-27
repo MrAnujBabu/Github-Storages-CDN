@@ -1,6 +1,7 @@
 # Roadmap
 
 ## In progress
+- [x] Final push (Sep 27 2026): 3 bug fixes (folder rename/move alias redirect, bulk-move self-move skip, strict upload origin check) + README/roadmap pushed to `Github-Storages-CDN` — commit 61d7984.
 - [x] Workspace move #5 (user 17:31 UTC): new workspace — GitHub API, Parallel, Perplexity re-linked fresh (README step 2 updated). Library reads/uploads unaffected; next owner action to verify: sign-in + upload test.
 - [x] Workspace move #4 (user 15:39 UTC, backup `link-free-files-main.zip`): code restored here, GitHub API re-linked ("NB's GitHub API"), repo audited, 2 commits pushed (1a65c26 sync, 44c4beb legacy cleanup + Vercel build fix).
 - [x] Vercel site `github-storages-cdn.vercel.app`: HTTP 200 and serving 3af8392 (new About copy live). Owner features there need Vercel env vars `OWNER_PASSCODE`, `SESSION_SECRET`, `GITHUB_TOKEN` (only the owner can set them — DEPLOYMENT.md).
