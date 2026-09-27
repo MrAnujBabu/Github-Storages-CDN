@@ -13,7 +13,7 @@ Everything the app needs is listed here so nothing is lost when the environment 
 
 0. **Resume, don't restart** — open `roadmap.md`: "In progress" is the exact next step. Finished items stay finished.
 1. **Code** — if the project is blank, restore it from the code repo `MrAnujBabu/Github-Storages-CDN@main` (or the latest backup zip): copy everything except `.git`, `.lovable/`, `node_modules/`, `.env`, then `bun install`. The repo mirrors this project; `src/routeTree.gen.ts` regenerates itself.
-2. **GitHub API connector** — Lovable → Connectors → GitHub → connect the account that owns the storage repo, with `repo` scope. This creates the `GITHUB_API_KEY` secret. Without it the library still *reads* (public repo) but upload / rename / delete fail. (Lost on every workspace move so far — re-link first. Move #4, Sep 26 2026 15:40 UTC: re-linked as "NB's GitHub API".)
+2. **GitHub API connector** — Lovable → Connectors → GitHub → connect the account that owns the storage repo, with `repo` scope. This creates the `GITHUB_API_KEY` secret. Without it the library still *reads* (public repo) but upload / rename / delete fail. (Lost on every workspace move so far — re-link first. Move #5, Sep 26 2026 17:31 UTC: re-linked fresh in the new workspace.) Research connectors Perplexity and Parallel were also re-linked fresh at the same time (both Lovable-managed; they only power chat-time research, not app features).
 3. **Secrets** (Project Settings → Secrets):
    - `OWNER_PASSCODE` — the passcode typed on `/sign-in`. Only the owner knows it; choose a new one if lost.
    - `SESSION_SECRET` — random 64-char string used to sign the owner cookie. Generate a fresh one; old sessions simply expire.

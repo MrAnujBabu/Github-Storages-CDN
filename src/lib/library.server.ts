@@ -160,9 +160,13 @@ function visibleFile(entry: TreeEntry): boolean {
 }
 
 export function buildFolderView(snapshot: Snapshot, rawPath: string, includeHidden: boolean): FolderView {
-  const path = normalizePath(rawPath);
-  if (!isSafePath(path)) throw new LibraryError("Folder ka naam theek nahi hai.", 400);
+  const requested = normalizePath(rawPath);
+  if (!isSafePath(requested)) throw new LibraryError("Folder ka naam theek nahi hai.", 400);
   const m = snapshot.manifest;
+  // Old folder links keep working after a rename/move (same alias map files use).
+  const livePrefix = requested + "/";
+  const path =
+    requested && !snapshot.files.some((e) => e.path.startsWith(livePrefix)) ? resolveAlias(m, requested) : requested;
 
   const prefix = path ? path + "/" : "";
   const childFiles = new Map<string, TreeEntry>();
@@ -743,7 +747,10 @@ export async function moveMany(paths: string[], toFolder: string): Promise<{ mov
       skipped++;
       continue;
     }
-    if (dest === from || dest.startsWith(from + "/")) throw new LibraryError("Folder ko khud ke andar nahi le ja sakte.");
+    if (dest === from || dest.startsWith(from + "/")) {
+      skipped++;
+      continue;
+    }
     const affected = filesUnder(snapshot, from);
     if (affected.length === 0) {
       skipped++;

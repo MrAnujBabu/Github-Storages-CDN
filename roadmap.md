@@ -1,6 +1,7 @@
 # Roadmap
 
 ## In progress
+- [x] Workspace move #5 (user 17:31 UTC): new workspace — GitHub API, Parallel, Perplexity re-linked fresh (README step 2 updated). Library reads/uploads unaffected; next owner action to verify: sign-in + upload test.
 - [x] Workspace move #4 (user 15:39 UTC, backup `link-free-files-main.zip`): code restored here, GitHub API re-linked ("NB's GitHub API"), repo audited, 2 commits pushed (1a65c26 sync, 44c4beb legacy cleanup + Vercel build fix).
 - [x] Vercel site `github-storages-cdn.vercel.app`: HTTP 200 and serving 3af8392 (new About copy live). Owner features there need Vercel env vars `OWNER_PASSCODE`, `SESSION_SECRET`, `GITHUB_TOKEN` (only the owner can set them — DEPLOYMENT.md).
 - [x] Admin login + PDF upload verify (user 15:50 UTC): `OWNER_PASSCODE` + `SESSION_SECRET` set; Playwright sign-in → upload → Raw/Pages/jsDelivr all 200 with %PDF- → test folder deleted (storage repo clean).
@@ -15,7 +16,7 @@
 - [ ] Git sync (auto code backup to GitHub): only the owner can connect — Plus (+) menu → GitHub → Connect project → pick `Github-Storages-CDN`.
 
 ## Ready
-- [ ] Owner flow phone test step 7: root row "More actions" stays disabled (busy flag?) — fix, then remove Test-flow-*/Dbg-* folders from storage repo.
+- [x] Owner flow phone test step 7 (16:45 UTC): "More actions" bug reproduce nahi hua — current code mein menu par koi disabled condition hai hi nahi; owner sign-in + 480px viewport par sab rows ke menu khulte hain (owner items sahit). Dbg-9790/9863/9893 aur Test-flow-29465/30348/30466/30590/30682 storage repo se delete kar diye.
 - [ ] Simpler upload: drop zone + paste + camera on phone, per-file progress, clear "link ready" state.
 - [ ] Dynamic view: per-folder view/sort remembered, quick arrange (up/down), folder covers.
 - [ ] Desktop folder tree sidebar for large libraries.
@@ -29,3 +30,5 @@
 - [x] Default link style → GitHub Pages (repo past jsDelivr 50 MB cap); Pages verified live
 - [x] Select mode: multi copy / move / delete in one commit
 - [x] Code synced to `Github-Storages-CDN` (14:50 UTC commit "Sync from Lovable: Browse home, Pages links, security fixes")
+
+- [x] Deep E2E test (Sep 26 2026): visitor pages phone+desktop, sign-in, upload, rename (.html blocked), hide, folder rename + old link, multi-move (1 commit), link health, bulk delete — all pass; test folders cleaned. Open: one unexplained 409 in console during owner run.

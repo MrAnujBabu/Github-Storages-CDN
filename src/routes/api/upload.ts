@@ -26,6 +26,7 @@ export const Route = createFileRoute("/api/upload")({
         const origin = request.headers.get("origin");
         const site = request.headers.get("sec-fetch-site");
         if (site && site !== "same-origin" && site !== "none") return json({ error: "Request accept nahi hui." }, 403);
+        if (!origin && !site) return json({ error: "Request accept nahi hui." }, 403);
         if (origin) {
           const reqHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
           try {
