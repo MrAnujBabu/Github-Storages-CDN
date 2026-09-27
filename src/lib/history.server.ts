@@ -20,20 +20,41 @@ export interface HistoryRow {
   created_at: string;
 }
 
+const URL_VARS = ["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"] as const;
+const KEY_VARS = ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY", "SUPABASE_SECRET_KEY"] as const;
+
+function firstEnv(names: readonly string[]): string | undefined {
+  for (const n of names) {
+    const v = process.env[n]?.trim();
+    if (v) return v;
+  }
+  return undefined;
+}
+
 function config(): { url: string; key: string } | null {
-  const url = process.env["SUPABASE_URL"];
-  const key = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const url = firstEnv(URL_VARS);
+  const key = firstEnv(KEY_VARS);
   if (!url || !key) return null;
   return { url: url.replace(/\/$/, ""), key };
 }
 
+/** Human-readable reason when history is not configured (names the missing variable). */
+export function historyConfigProblem(): string | null {
+  const url = firstEnv(URL_VARS);
+  const key = firstEnv(KEY_VARS);
+  if (url && key) return null;
+  const missing = [!url ? "SUPABASE_URL" : null, !key ? "SUPABASE_SERVICE_ROLE_KEY" : null].filter(Boolean).join(" aur ");
+  const found = [url ? "SUPABASE_URL" : null, key ? "SUPABASE_SERVICE_ROLE_KEY" : null].filter(Boolean).join(", ");
+  return `${missing} is site ke environment variables me set nahi hai${found ? ` (${found} mil gaya)` : ""} — Vercel → Settings → Environment Variables me add karke Redeploy karo.`;
+}
+
 /** Record uploaded files. Never throws — history must not break uploads. */
 export async function recordUploads(
-  repo: { owner: string; repo: string; branch: string },
+  repo: { owner: string; repo: string; branch: string } | undefined,
   entries: { name: string; path: string; size: number }[],
 ): Promise<void> {
   const cfg = config();
-  if (!cfg || entries.length === 0) return;
+  if (!cfg || !repo || entries.length === 0) return;
   const spec = `${repo.owner}/${repo.repo}@${repo.branch}`;
   const rows = entries.map((e) => {
     const folder = e.path.includes("/") ? e.path.slice(0, e.path.lastIndexOf("/")) : "";
@@ -67,7 +88,7 @@ export async function recordUploads(
 /** Latest uploads, newest first. Throws if Supabase env is not configured. */
 export async function listUploads(limit = 100): Promise<HistoryRow[]> {
   const cfg = config();
-  if (!cfg) throw new Error("Supabase env (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) Vercel me set nahi hai.");
+  if (!cfg) throw new Error(historyConfigProblem() ?? "Supabase env set nahi hai.");
   const res = await fetch(
     `${cfg.url}/rest/v1/uploaded_pdfs?select=id,file_name,size_bytes,folder,repo,cdn_url,github_url,created_at&order=created_at.desc&limit=${limit}`,
     { headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` } },

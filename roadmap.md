@@ -36,3 +36,13 @@
 - [x] Code synced to `Github-Storages-CDN` (14:50 UTC commit "Sync from Lovable: Browse home, Pages links, security fixes")
 
 - [x] Deep E2E test (Sep 26 2026): visitor pages phone+desktop, sign-in, upload, rename (.html blocked), hide, folder rename + old link, multi-move (1 commit), link health, bulk delete — all pass; test folders cleaned. Open: one unexplained 409 in console during owner run.
+
+## Audit — Sep 27, 2026 (end-to-end test on the live site)
+- [x] Fixed: Storage repos page showed "Repo ya file GitHub par nahi mili" on Vercel (trailing slash in the repo info request)
+- [x] Fixed: web fonts never loaded in production (invalid Google Fonts URL for Fraunces axes)
+- [x] Fixed: blob upload did not return the repo to the history logger (would have failed uploads once Supabase env is set)
+- [x] History page now names exactly which Supabase variable is missing; accepts common aliases
+- [x] Security headers on Vercel (nosniff, SAMEORIGIN, referrer policy, permissions policy, HSTS)
+- [ ] Durable brute-force limit for the passcode (needs a shared store; in-memory resets per serverless instance)
+- [ ] Magic-byte check on the blob upload path (only extension check today)
+- [ ] Manifest compare-and-swap on retry (two tabs writing at once can overwrite each other's manifest change)

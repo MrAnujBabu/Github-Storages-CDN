@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as FilesRouteImport } from './routes/files'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ReposRouteImport } from './routes/repos'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -36,6 +37,11 @@ const AboutRoute = AboutRouteImport.update({
 const FilesRoute = FilesRouteImport.update({
   id: '/files',
   path: '/files',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReposRoute = ReposRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/files': typeof FilesRoute
+  '/history': typeof HistoryRoute
   '/repos': typeof ReposRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/files': typeof FilesRoute
+  '/history': typeof HistoryRoute
   '/repos': typeof ReposRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/files': typeof FilesRoute
+  '/history': typeof HistoryRoute
   '/repos': typeof ReposRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/files'
+    | '/history'
     | '/repos'
     | '/search'
     | '/settings'
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/files'
+    | '/history'
     | '/repos'
     | '/search'
     | '/settings'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/files'
+    | '/history'
     | '/repos'
     | '/search'
     | '/settings'
@@ -187,6 +199,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   FilesRoute: typeof FilesRoute
+  HistoryRoute: typeof HistoryRoute
   ReposRoute: typeof ReposRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
@@ -220,6 +233,13 @@ declare module '@tanstack/react-router' {
       path: '/files'
       fullPath: '/files'
       preLoaderRoute: typeof FilesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/repos': {
@@ -299,6 +319,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   FilesRoute: FilesRoute,
+  HistoryRoute: HistoryRoute,
   ReposRoute: ReposRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,

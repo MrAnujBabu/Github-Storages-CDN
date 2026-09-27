@@ -140,7 +140,10 @@ export async function ghJson<T>(path: string, init: RequestInit = {}, attempt = 
 }
 
 function repoPath(repo: RepoRef, suffix: string): string {
-  return `repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}/${suffix}`;
+  // No trailing slash when suffix is empty: api.github.com answers 404 to
+  // `repos/{owner}/{repo}/` (the connector gateway tolerated it, Vercel did not).
+  const base = `repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
+  return suffix ? `${base}/${suffix}` : base;
 }
 
 export interface TreeEntry {

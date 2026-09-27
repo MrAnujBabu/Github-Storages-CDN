@@ -627,7 +627,7 @@ export interface IncomingBlob {
 export async function uploadBlobFiles(
   folder: string,
   incoming: IncomingBlob[],
-): Promise<{ commitSha: string; uploaded: UploadedEntry[] }> {
+): Promise<{ commitSha: string; uploaded: UploadedEntry[]; repo: RepoRef }> {
   const folderClean = assertFolderPath(folder);
   if (incoming.length === 0) throw new LibraryError("Koi file nahi mili.");
   for (const f of incoming) {
@@ -662,7 +662,7 @@ export async function uploadBlobFiles(
   const label = uploaded.length === 1 ? `Upload ${uploaded[0]!.name}` : `Upload ${uploaded.length} files to ${folderClean || "root"}`;
   const result = await commit(snapshot, changes, label);
   if (purge.length) await purgeCdnPaths(snapshot.repo, purge);
-  return { commitSha: result.commitSha, uploaded };
+  return { commitSha: result.commitSha, uploaded, repo: snapshot.repo };
 }
 
 export async function renameOrMove(path: string, target: string): Promise<{ from: string; to: string }> {
