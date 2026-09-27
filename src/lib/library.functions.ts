@@ -452,3 +452,23 @@ export const setActiveRepo = createServerFn({ method: "POST" })
     await withStatus(() => lib.setActiveStorageRepo(data.spec));
     return { ok: true as const };
   });
+
+/* ------------------------------ upload history ------------------------------ */
+
+export interface UploadHistoryItem {
+  id: string;
+  file_name: string;
+  size_bytes: number;
+  folder: string;
+  repo: string;
+  cdn_url: string;
+  github_url: string;
+  created_at: string;
+}
+
+export const getUploadHistory = createServerFn({ method: "GET" })
+  .middleware([ownerOnly])
+  .handler(async (): Promise<UploadHistoryItem[]> => {
+    const { listUploads } = await import("./history.server");
+    return withStatus(() => listUploads(100));
+  });

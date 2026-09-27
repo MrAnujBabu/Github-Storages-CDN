@@ -572,7 +572,7 @@ export interface IncomingFile {
 export async function uploadFiles(
   folder: string,
   incoming: IncomingFile[],
-): Promise<{ commitSha: string; uploaded: UploadedEntry[] }> {
+): Promise<{ commitSha: string; uploaded: UploadedEntry[]; repo: RepoRef }> {
   const folderClean = assertFolderPath(folder);
   if (incoming.length === 0) throw new LibraryError("Koi file nahi mili.");
   for (const f of incoming) {
@@ -608,7 +608,7 @@ export async function uploadFiles(
   const result = await commit(snapshot, changes, label);
   // Awaited on purpose: a detached promise may be dropped once the Worker response is sent.
   if (purge.length) await purgeCdnPaths(snapshot.repo, purge);
-  return { commitSha: result.commitSha, uploaded };
+  return { commitSha: result.commitSha, uploaded, repo: snapshot.repo };
 }
 
 export interface IncomingBlob {

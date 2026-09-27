@@ -81,6 +81,9 @@ export const Route = createFileRoute("/api/upload-finish")({
 
         try {
           const result = await uploadBlobFiles(folder, incoming);
+          // History log in Supabase — kabhi upload fail nahi karta (andhar se safe hai).
+          const { recordUploads } = await import("@/lib/history.server");
+          await recordUploads(result.repo, result.uploaded);
           return json({ ok: true, ...result });
         } catch (err) {
           if (err instanceof LibraryError) return json({ error: err.message }, err.status);
